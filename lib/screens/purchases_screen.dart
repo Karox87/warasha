@@ -201,7 +201,7 @@ void _showAddProductDialog() {
   final barcodeController = TextEditingController();
   final buyPriceController = TextEditingController();
   final sellPriceController = TextEditingController();
-  final quantityController = TextEditingController(text: '0');
+  final quantityController = TextEditingController();
 
   showDialog(
     context: context,
@@ -267,7 +267,8 @@ void _showAddProductDialog() {
             TextField(
               controller: quantityController,
               decoration: const InputDecoration(
-                labelText: 'بڕ (دەستپێکی)',
+                labelText: 'بڕ (ژمارەی کاڵا)',
+                hintText: '0',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.inventory),
               ),
@@ -537,46 +538,52 @@ void _showDeleteConfirmDialog(Map<String, dynamic> product) {
           child: const Text('نەخێر'),
         ),
         ElevatedButton(
-          onPressed: () async {
-            try {
-              final db = await _dbHelper.database;
-              
-              // ✅ یەکەم: سڕینەوەی کڕینەکان (پێش کاڵا)
-              await db.delete('purchases', where: 'product_id = ?', whereArgs: [product['id']]);
-              
-              // ✅ دووەم: سڕینەوەی کاڵا
-              await db.delete('products', where: 'id = ?', whereArgs: [product['id']]);
-              
-              // ✅ ڕاستەوخۆ سڕینەوە لە لیستەکان
-              if (mounted) {
-                setState(() {
-                  _products.removeWhere((p) => p['id'] == product['id']);
-                  _filteredProducts.removeWhere((p) => p['id'] == product['id']);
-                });
-              }
-              
-              Navigator.pop(context); // داخستنی دیالۆگ
-              
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('"${product['name']}" بە سەرکەوتوویی سڕایەوە'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              }
-            } catch (e) {
-              print('❌ هەڵە لە سڕینەوە: $e');
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('هەڵە لە سڕینەوە: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            }
-          },
+         onPressed: () async {
+  try {
+    // Close the dialog first
+    Navigator.pop(context);
+    
+    // Show loading indicator
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تکایە چاوەڕێ بە...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
+    
+    final db = await _dbHelper.database;
+    
+    // ✅ یەکەم: سڕینەوەی کڕینەکان (پێش کاڵا)
+    await db.delete('purchases', where: 'product_id = ?', whereArgs: [product['id']]);
+    
+    // ✅ دووەم: سڕینەوەی کاڵا
+    await db.delete('products', where: 'id = ?', whereArgs: [product['id']]);
+    
+    // ✅ نوێکردنەوەی لیستەکان
+    await _loadData(); // Reload all data instead of manual removal
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('"${product['name']}" بە سەرکەوتووی سڕایەوە'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  } catch (e) {
+    print('❌ هەڵە لە سڕینەوە: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('هەڵە لە سڕینەوە: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+},
           style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
           child: const Text('بەڵێ، بیسڕەوە'),
         ),

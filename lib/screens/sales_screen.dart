@@ -870,7 +870,7 @@ Widget build(BuildContext context) {
                           )
                         : ListView.builder(
                             padding: const EdgeInsets.symmetric(horizontal: 8),
-                            itemCount: _filteredProducts.length,
+                            itemCount: _filteredProducts.length > 3 ? 3 : _filteredProducts.length,
                             itemBuilder: (context, index) {
                               final product = _filteredProducts[index];
                               final isLowStock = product['quantity'] < 10;
