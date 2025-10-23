@@ -25,6 +25,19 @@
     <array>
         <string>armv7</string>
     </array>
+	<!-- مۆڵەتەکان بۆ گەیشتن بە کۆگا -->
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>پاراستن و گەڕاندنەوەی باکئەپ</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>هاوبەشکردنی فایلەکانی باکئەپ</string>
+    
+    <!-- پشتخانی فایل -->
+    <key>UISupportsDocumentBrowser</key>
+    <true/>
+    <key>UIFileSharingEnabled</key>
+    <true/>
+    <key>LSSupportsOpeningDocumentsInPlace</key>
+    <true/>
     
     <!-- ڕێگریکردن لە بەکارهێنانی iTunes -->
     <key>ITSAppUsesNonExemptEncryption</key>

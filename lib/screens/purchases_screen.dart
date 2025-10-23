@@ -499,7 +499,7 @@ void _showAddProductDialog() {
   );
 }
 
- void _showDeleteConfirmDialog(Map<String, dynamic> product) {
+void _showDeleteConfirmDialog(Map<String, dynamic> product) {
   showDialog(
     context: context,
     builder: (context) => AlertDialog(
@@ -541,42 +541,36 @@ void _showAddProductDialog() {
             try {
               final db = await _dbHelper.database;
               
-              // سڕینەوەی کاڵا
-              await db.delete('products', where: 'id = ?', whereArgs: [product['id']]);
-              
-              // سڕینەوەی کڕین پەیوەندیدارەکان
+              // ✅ یەکەم: سڕینەوەی کڕینەکان (پێش کاڵا)
               await db.delete('purchases', where: 'product_id = ?', whereArgs: [product['id']]);
               
-              // 🆕 نوێکردنەوەی لیستەکان یەکسەر
+              // ✅ دووەم: سڕینەوەی کاڵا
+              await db.delete('products', where: 'id = ?', whereArgs: [product['id']]);
+              
+              // ✅ ڕاستەوخۆ سڕینەوە لە لیستەکان
               if (mounted) {
                 setState(() {
-                  // سڕینەوە لە لیستی سەرەکی
                   _products.removeWhere((p) => p['id'] == product['id']);
-                  
-                  // سڕینەوە لە لیستی فلتەرکراو
                   _filteredProducts.removeWhere((p) => p['id'] == product['id']);
-                  
-                  // نوێکردنەوەی فلتەر
-                  _filterProducts();
                 });
               }
               
-              Navigator.pop(context); // داخستنی دیالۆگی سڕینەوە
+              Navigator.pop(context); // داخستنی دیالۆگ
               
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('کاڵاکە سڕایەوە، مێژووی فرۆشتنەکان مابێتەوە'),
-                    backgroundColor: Colors.red,
+                  SnackBar(
+                    content: Text('"${product['name']}" بە سەرکەوتوویی سڕایەوە'),
+                    backgroundColor: Colors.green,
                   ),
                 );
               }
             } catch (e) {
-              print('هەڵە لە سڕینەوە: $e');
+              print('❌ هەڵە لە سڕینەوە: $e');
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('هەڵە لە سڕینەوە'),
+                  SnackBar(
+                    content: Text('هەڵە لە سڕینەوە: $e'),
                     backgroundColor: Colors.red,
                   ),
                 );

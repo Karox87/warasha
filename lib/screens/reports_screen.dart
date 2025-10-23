@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
+import 'package:koga/backup/backup_restore_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -45,7 +46,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       await _calculateTopSellingProducts();
       
     } catch (e) {
-      print('هەڵە لە بارکردنی داتا: $e');
+      _showErrorSnackbar('هەڵە لە بارکردنی داتا: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -91,7 +92,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         _monthProfit = (monthSalesResult.first['total_profit'] as num?)?.toDouble() ?? 0.0;
       }
     } catch (e) {
-      print('هەڵە لە حیسابکردنی ئامار: $e');
+      _showErrorSnackbar('هەڵە لە حیسابکردنی ئامار: $e');
     }
   }
 
@@ -126,7 +127,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
         };
       }).toList();
     } catch (e) {
-      print('هەڵە لە حیسابکردنی بەرزترین کاڵا: $e');
+      _showErrorSnackbar('هەڵە لە حیسابکردنی بەرزترین کاڵا: $e');
+    }
+  }
+
+  void _showErrorSnackbar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -149,94 +162,78 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ڕاپۆرت گشتی'),
-        backgroundColor: Colors.blue,
+        title: const Text(
+          'ڕاپۆرت گشتی',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+        backgroundColor: Colors.blue.shade700,
+        elevation: 2,
         actions: [
+          // دوگمەی نوێکردنەوە
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, size: 24),
             onPressed: _loadData,
-            tooltip: 'نوێکردنەوە',
+            tooltip: 'نوێکردنەوەی داتا',
+          ),
+          // دوگمەی باکئەپ
+          IconButton(
+            icon: const Icon(Icons.backup, size: 24),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const BackupRestoreScreen(),
+                ),
+              );
+            },
+            tooltip: 'باکئەپ و گەڕاندنەوە',
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? _buildLoadingIndicator()
           : RefreshIndicator(
               onRefresh: _loadData,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // کارتەکانی ئەمڕۆ و ئەم مانگە
                     _buildTimeBasedStats(),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
                     
                     // کارتی قازانج گشتی
                     _buildMainProfitCard(profit),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
                     
                     // ئاماری گشتی
                     _buildSectionTitle('ئاماری گشتی'),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildStatCard(
-                            'کۆی کڕین',
-                            totalPurchases,
-                            Icons.shopping_cart,
-                            Colors.green,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _buildStatCard(
-                            'کۆی فرۆشتن',
-                            totalSales,
-                            Icons.sell,
-                            Colors.orange,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildStatCard(
-                            'کۆی قەرز',
-                            totalDebts,
-                            Icons.account_balance_wallet,
-                            Colors.red,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _buildStatCard(
-                            'نرخی کۆگا',
-                            inventoryValue,
-                            Icons.inventory,
-                            Colors.purple,
-                          ),
-                        ),
-                      ],
-                    ),
+                    const SizedBox(height: 12),
+                    _buildGeneralStats(totalPurchases, totalSales, totalDebts, inventoryValue),
                     const SizedBox(height: 24),
                     
                     // بەرزترین کاڵا فرۆشراوەکان
                     _buildSectionTitle('بەرزترین کاڵا فرۆشراوەکان'),
+                    const SizedBox(height: 12),
                     _buildTopSellingProducts(),
                     const SizedBox(height: 24),
                     
                     // ئاماری کاڵاکان
                     _buildSectionTitle('ئاماری کاڵاکان'),
+                    const SizedBox(height: 12),
                     _buildProductsStats(),
                     const SizedBox(height: 24),
                     
                     // کاڵای کەم لە کۆگا
                     _buildSectionTitle('کاڵای کەم لە کۆگا'),
+                    const SizedBox(height: 12),
                     _buildLowStockProducts(),
+                    const SizedBox(height: 32),
                   ],
                 ),
               ),
@@ -244,161 +241,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildTimeBasedStats() {
-    return Column(
-      children: [
-        // ئامارەکانی ئەمڕۆ
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.blue.shade400, Colors.blue.shade600],
-            ),
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.blue.shade200,
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.today, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'فرۆشتنی ئەمڕۆ',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const Divider(color: Colors.white30, height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: _buildMiniStatCard(
-                      'فرۆشتن',
-                      _todaySales,
-                      Icons.sell,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildMiniStatCard(
-                      'قازانج',
-                      _todayProfit,
-                      Icons.trending_up,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        
-        // ئامارەکانی ئەم مانگە
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.purple.shade400, Colors.purple.shade600],
-            ),
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.purple.shade200,
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.calendar_month, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'فرۆشتنی ${DateFormat('MMMM').format(DateTime.now())}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const Divider(color: Colors.white30, height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: _buildMiniStatCard(
-                      'فرۆشتن',
-                      _monthSales,
-                      Icons.sell,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildMiniStatCard(
-                      'قازانج',
-                      _monthProfit,
-                      Icons.trending_up,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMiniStatCard(String label, double value, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(8),
-      ),
+  Widget _buildLoadingIndicator() {
+    return Center(
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: Colors.white, size: 24),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-            ),
+          CircularProgressIndicator(
+            strokeWidth: 3,
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade700),
           ),
-          const SizedBox(height: 4),
-          Text(
-            _formatNumber(value),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          const SizedBox(height: 16),
           const Text(
-            'IQD',
+            'بارکردنی داتا...',
             style: TextStyle(
-              color: Colors.white70,
-              fontSize: 10,
+              fontSize: 16,
+              color: Colors.grey,
             ),
           ),
         ],
@@ -406,100 +263,139 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildTopSellingProducts() {
-    if (_topSellingProducts.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Center(
-            child: Text(
-              'هیچ فرۆشتنێک نییە',
-              style: TextStyle(color: Colors.grey.shade600),
+  Widget _buildTimeBasedStats() {
+    return Column(
+      children: [
+        // ئامارەکانی ئەمڕۆ
+        _buildTimeCard(
+          title: 'فرۆشتنی ئەمڕۆ',
+          icon: Icons.today,
+          sales: _todaySales,
+          profit: _todayProfit,
+          gradientColors: [Colors.blue.shade500, Colors.blue.shade700],
+          shadowColor: Colors.blue.shade200,
+        ),
+        const SizedBox(height: 12),
+        
+        // ئامارەکانی ئەم مانگە
+        _buildTimeCard(
+          title: 'فرۆشتنی ${DateFormat('MMMM').format(DateTime.now())}',
+          icon: Icons.calendar_month,
+          sales: _monthSales,
+          profit: _monthProfit,
+          gradientColors: [Colors.purple.shade500, Colors.purple.shade700],
+          shadowColor: Colors.purple.shade200,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimeCard({
+    required String title,
+    required IconData icon,
+    required double sales,
+    required double profit,
+    required List<Color> gradientColors,
+    required Color shadowColor,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: gradientColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: shadowColor,
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: Colors.white, size: 22),
+              const SizedBox(width: 10),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const Divider(color: Colors.white30, height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: _buildMiniStatCard(
+                  'فرۆشتن',
+                  sales,
+                  Icons.sell,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildMiniStatCard(
+                  'قازانج',
+                  profit,
+                  Icons.trending_up,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniStatCard(String label, double value, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.white, size: 26),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
             ),
           ),
-        ),
-      );
-    }
-
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: _topSellingProducts.length,
-        separatorBuilder: (context, index) => const Divider(height: 1),
-        itemBuilder: (context, index) {
-          final product = _topSellingProducts[index];
-          final rank = index + 1;
-          Color rankColor;
-          
-          switch (rank) {
-            case 1:
-              rankColor = Colors.amber.shade700;
-              break;
-            case 2:
-              rankColor = Colors.grey.shade600;
-              break;
-            case 3:
-              rankColor = Colors.brown.shade400;
-              break;
-            default:
-              rankColor = Colors.blue.shade400;
-          }
-
-          return ListTile(
-            leading: CircleAvatar(
-              backgroundColor: rankColor.withOpacity(0.2),
-              child: Text(
-                '#$rank',
-                style: TextStyle(
-                  color: rankColor,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+          const SizedBox(height: 6),
+          Text(
+            _formatNumber(value),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
             ),
-            title: Text(
-              product['name'],
-              style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            'IQD',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 11,
             ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 4),
-                Text(
-                  'فرۆشراو: ${product['total_sold']} دانە',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade700,
-                  ),
-                ),
-                Text(
-                  'قازانج: ${_formatNumber(product['total_profit'])} IQD',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.green.shade700,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            trailing: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade100,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                _formatNumber(product['total_revenue']),
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.orange.shade700,
-                ),
-              ),
-            ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
@@ -509,20 +405,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
     
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: isProfit
-              ? [Colors.green.shade400, Colors.green.shade600]
-              : [Colors.red.shade400, Colors.red.shade600],
+              ? [Colors.green.shade500, Colors.green.shade700]
+              : [Colors.red.shade500, Colors.red.shade700],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: isProfit ? Colors.green.shade200 : Colors.red.shade200,
-            blurRadius: 12,
+            color: isProfit ? Colors.green.shade300 : Colors.red.shade300,
+            blurRadius: 15,
             offset: const Offset(0, 6),
           ),
         ],
@@ -531,32 +427,33 @@ class _ReportsScreenState extends State<ReportsScreen> {
         children: [
           Icon(
             isProfit ? Icons.trending_up : Icons.trending_down,
-            size: 48,
+            size: 52,
             color: Colors.white,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Text(
             isProfit ? 'قازانج گشتی' : 'زەرەر',
             style: const TextStyle(
               color: Colors.white70,
-              fontSize: 18,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Text(
             '${_formatNumber(profit.abs())} IQD',
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 32,
+              fontSize: 36,
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Text(
-            DateFormat('yyyy-MM-dd').format(DateTime.now()),
+            DateFormat('yyyy-MM-dd • HH:mm').format(DateTime.now()),
             style: const TextStyle(
               color: Colors.white70,
-              fontSize: 14,
+              fontSize: 15,
             ),
           ),
         ],
@@ -564,38 +461,101 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
+  Widget _buildGeneralStats(double purchases, double sales, double debts, double inventory) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                'کۆی کڕین',
+                purchases,
+                Icons.shopping_cart,
+                Colors.green,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildStatCard(
+                'کۆی فرۆشتن',
+                sales,
+                Icons.sell,
+                Colors.orange,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                'کۆی قەرز',
+                debts,
+                Icons.account_balance_wallet,
+                Colors.red,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildStatCard(
+                'نرخی کۆگا',
+                inventory,
+                Icons.inventory_2,
+                Colors.purple,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildStatCard(String title, double value, IconData icon, Color color) {
     return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: Colors.white,
+        ),
         child: Column(
           children: [
-            Icon(icon, size: 32, color: color),
-            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 28, color: color),
+            ),
+            const SizedBox(height: 12),
             Text(
               title,
               style: TextStyle(
                 color: Colors.grey.shade700,
-                fontSize: 12,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
             Text(
               _formatNumber(value),
               style: TextStyle(
                 color: color,
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const Text(
+            const SizedBox(height: 4),
+            Text(
               'IQD',
               style: TextStyle(
-                color: Colors.grey,
-                fontSize: 10,
+                color: Colors.grey.shade500,
+                fontSize: 12,
               ),
             ),
           ],
@@ -606,56 +566,189 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      padding: const EdgeInsets.only(left: 4),
       child: Text(
         title,
         style: const TextStyle(
-          fontSize: 18,
+          fontSize: 20,
           fontWeight: FontWeight.bold,
+          color: Colors.black87,
         ),
+      ),
+    );
+  }
+
+  Widget _buildTopSellingProducts() {
+    if (_topSellingProducts.isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.analytics_outlined,
+        message: 'هیچ فرۆشتنێک نییە',
+        description: 'فرۆشتنەکان لێرە دەردەکەون',
+      );
+    }
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: _topSellingProducts.length,
+        separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade200),
+        itemBuilder: (context, index) {
+          final product = _topSellingProducts[index];
+          final rank = index + 1;
+          Color rankColor;
+          String rankText;
+          
+          switch (rank) {
+            case 1:
+              rankColor = Colors.amber.shade700;
+              rankText = '١ەم';
+              break;
+            case 2:
+              rankColor = Colors.grey.shade600;
+              rankText = '٢ەم';
+              break;
+            case 3:
+              rankColor = Colors.brown.shade500;
+              rankText = '٣ەم';
+              break;
+            default:
+              rankColor = Colors.blue.shade500;
+              rankText = '#$rank';
+          }
+
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            leading: Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: rankColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+                border: Border.all(color: rankColor.withOpacity(0.3)),
+              ),
+              child: Center(
+                child: Text(
+                  rankText,
+                  style: TextStyle(
+                    color: rankColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+            title: Text(
+              product['name'],
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 6),
+                Text(
+                  'فرۆشراو: ${product['total_sold']} دانە',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'قازانج: ${_formatNumber(product['total_profit'])} IQD',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.green.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _formatNumber(product['total_revenue']),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange.shade800,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    'IQD',
+                    style: TextStyle(
+                      color: Colors.orange.shade600,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 
   Widget _buildProductsStats() {
     if (_products.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Center(
-            child: Text(
-              'هیچ کاڵایەک نییە',
-              style: TextStyle(color: Colors.grey.shade600),
-            ),
-          ),
-        ),
+      return _buildEmptyState(
+        icon: Icons.inventory_2_outlined,
+        message: 'هیچ کاڵایەک نییە',
+        description: 'کاڵاکان لێرە دەردەکەون',
       );
     }
 
+    final totalQuantity = _products.fold(0, (sum, p) => sum + (p['quantity'] as int));
+    final lowStockCount = _products.where((p) => p['quantity'] < 10).length;
+    final outOfStockCount = _products.where((p) => p['quantity'] == 0).length;
+
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            _buildInfoRow('ژمارەی کاڵاکان', '${_products.length} جۆر'),
-            const Divider(),
             _buildInfoRow(
-              'کۆی بڕ',
-              '${_products.fold(0, (sum, p) => sum + (p['quantity'] as int))} دانە',
+              'ژمارەی کاڵاکان',
+              '${_products.length} جۆر',
+              icon: Icons.category,
             ),
-            const Divider(),
+            const Divider(height: 24),
+            _buildInfoRow(
+              'کۆی بڕی کۆگا',
+              '$totalQuantity دانە',
+              icon: Icons.storage,
+            ),
+            const Divider(height: 24),
             _buildInfoRow(
               'کاڵای کەم (< 10)',
-              '${_products.where((p) => p['quantity'] < 10).length} جۆر',
-              color: Colors.red,
+              '$lowStockCount جۆر',
+              icon: Icons.warning_amber,
+              color: Colors.orange,
             ),
-            const Divider(),
+            const Divider(height: 24),
             _buildInfoRow(
               'کاڵای بەتاڵ',
-              '${_products.where((p) => p['quantity'] == 0).length} جۆر',
-              color: Colors.orange,
+              '$outOfStockCount جۆر',
+              icon: Icons.error_outline,
+              color: Colors.red,
             ),
           ],
         ),
@@ -663,16 +756,32 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildInfoRow(String label, String value, {Color? color}) {
+  Widget _buildInfoRow(String label, String value, {IconData? icon, Color? color}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label),
+        Row(
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 20, color: color ?? Colors.grey.shade600),
+              const SizedBox(width: 12),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 15,
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
         Text(
           value,
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: color,
+            color: color ?? Colors.blue.shade700,
+            fontSize: 15,
           ),
         ),
       ],
@@ -683,73 +792,118 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final lowStockProducts = _products.where((p) => p['quantity'] < 10).toList();
 
     if (lowStockProducts.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.green.shade400),
-              const SizedBox(width: 12),
-              Text(
-                'هەموو کاڵاکان بڕی باشیان هەیە',
-                style: TextStyle(color: Colors.grey.shade700),
-              ),
-            ],
-          ),
-        ),
+      return _buildEmptyState(
+        icon: Icons.check_circle_outline,
+        message: 'هەموو کاڵاکان بڕی باشیان هەیە',
+        description: 'کاڵای کەم لە کۆگا نییە',
+        color: Colors.green,
       );
     }
 
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ListView.separated(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         itemCount: lowStockProducts.length,
-        separatorBuilder: (context, index) => const Divider(height: 1),
+        separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade200),
         itemBuilder: (context, index) {
           final product = lowStockProducts[index];
           final quantity = product['quantity'] as int;
           final isCritical = quantity == 0;
 
           return ListTile(
-            leading: CircleAvatar(
-              backgroundColor: isCritical 
-                  ? Colors.red.shade100 
-                  : Colors.orange.shade100,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            leading: Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: isCritical ? Colors.red.shade50 : Colors.orange.shade50,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isCritical ? Colors.red.shade200 : Colors.orange.shade200,
+                ),
+              ),
               child: Icon(
                 isCritical ? Icons.warning : Icons.info,
                 color: isCritical ? Colors.red : Colors.orange,
-                size: 20,
+                size: 24,
               ),
             ),
-            title: Text(product['name']),
+            title: Text(
+              product['name'],
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
             subtitle: Text(
-              isCritical ? 'بەتاڵە!' : 'بڕی کەم',
+              isCritical ? 'کاڵا بەتاڵە!' : 'بڕی کەم لە کۆگا',
               style: TextStyle(
                 color: isCritical ? Colors.red : Colors.orange,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
               ),
             ),
             trailing: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: isCritical 
-                    ? Colors.red.shade100 
-                    : Colors.orange.shade100,
+                color: isCritical ? Colors.red.shade50 : Colors.orange.shade50,
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isCritical ? Colors.red.shade200 : Colors.orange.shade200,
+                ),
               ),
               child: Text(
                 '$quantity',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: isCritical ? Colors.red.shade700 : Colors.orange.shade700,
+                  fontSize: 16,
                 ),
               ),
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String message,
+    required String description,
+    Color color = Colors.grey,
+  }) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          children: [
+            Icon(icon, size: 64, color: color.withOpacity(0.6)),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              description,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
