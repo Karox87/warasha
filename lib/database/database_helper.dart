@@ -13,30 +13,31 @@ class DatabaseHelper {
     return _database!;
   }
 
-  Future<Database> _initDB(String filePath) async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, filePath);
+Future<Database> _initDB(String filePath) async {
+  final dbPath = await getDatabasesPath();
+  final path = join(dbPath, filePath);
 
-    return await openDatabase(
-      path,
-      version: 4, // 🆕 گۆڕینی وەشان بۆ 4
-      onCreate: _createDB,
-      onUpgrade: _onUpgrade,
-    );
-  }
+  return await openDatabase(
+    path,
+    version: 6, // 🆕 گۆڕینی لە 5 بۆ 6
+    onCreate: _createDB,
+    onUpgrade: _onUpgrade,
+  );
+}
 
-  Future _createDB(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE products (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        barcode TEXT, -- 🆕 خانەی باڕکۆد زیادکرا
-        buy_price REAL NOT NULL,
-        sell_price REAL NOT NULL,
-        quantity INTEGER NOT NULL,
-        created_at TEXT NOT NULL
-      )
-    ''');
+Future _createDB(Database db, int version) async {
+  await db.execute('''
+    CREATE TABLE products (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      barcode TEXT,
+      buy_price REAL NOT NULL,
+      sell_price REAL NOT NULL,
+      wholesale_price REAL, 
+      quantity INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  ''');
 
     await db.execute('''
       CREATE TABLE purchases (
@@ -88,47 +89,59 @@ class DatabaseHelper {
       )
     ''');
   }
-  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      await db.execute('ALTER TABLE sales ADD COLUMN product_name TEXT');
-      await db.execute('ALTER TABLE sales ADD COLUMN buy_price REAL DEFAULT 0');
-      
-      final products = await db.query('products');
-      final sales = await db.query('sales');
-      
-      for (var sale in sales) {
-        final product = products.firstWhere(
-          (p) => p['id'] == sale['product_id'],
-          orElse: () => {'name': 'کاڵای سڕاوە', 'buy_price': 0},
-        );
-        
-        await db.update(
-          'sales',
-          {
-            'product_name': product['name'],
-            'buy_price': product['buy_price'] ?? 0,
-          },
-          where: 'id = ?',
-          whereArgs: [sale['id']],
-        );
-      }
-    }
-    
-    // زیادکردنی bulk_sale_id
-    if (oldVersion < 3) {
-      await db.execute('ALTER TABLE sales ADD COLUMN bulk_sale_id TEXT');
-    }
 
-    // 🆕 زیادکردنی خانەی barcode بۆ products
-    if (oldVersion < 4) {
-      try {
-        await db.execute('ALTER TABLE products ADD COLUMN barcode TEXT');
-        print('✅ خانەی barcode زیادکرا بۆ خشتەی products');
-      } catch (e) {
-        print('❌ هەڵە لە زیادکردنی خانەی barcode: $e');
-      }
+
+Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+  if (oldVersion < 2) {
+    await db.execute('ALTER TABLE sales ADD COLUMN product_name TEXT');
+    await db.execute('ALTER TABLE sales ADD COLUMN buy_price REAL DEFAULT 0');
+    
+    final products = await db.query('products');
+    final sales = await db.query('sales');
+    
+    for (var sale in sales) {
+      final product = products.firstWhere(
+        (p) => p['id'] == sale['product_id'],
+        orElse: () => {'name': 'کاڵای سڕاوە', 'buy_price': 0},
+      );
+      
+      await db.update(
+        'sales',
+        {
+          'product_name': product['name'],
+          'buy_price': product['buy_price'] ?? 0,
+        },
+        where: 'id = ?',
+        whereArgs: [sale['id']],
+      );
     }
   }
+  
+  // زیادکردنی bulk_sale_id
+  if (oldVersion < 3) {
+    await db.execute('ALTER TABLE sales ADD COLUMN bulk_sale_id TEXT');
+  }
+
+  // زیادکردنی خانەی barcode بۆ products
+  if (oldVersion < 5) {
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN wholesale_price REAL');
+      print('✅ خانەی wholesale_price زیادکرا');
+    } catch (e) {
+      print('❌ هەڵە لە زیادکردنی wholesale_price: $e');
+    }
+  }
+
+  // 🆕 زیادکردنی خانەی wholesale_price بۆ products
+  if (oldVersion < 6) {
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN wholesale_price REAL');
+      print('✅ خانەی wholesale_price زیادکرا لە وەشانی 6');
+    } catch (e) {
+      print('❌ هەڵە لە زیادکردنی wholesale_price: $e');
+    }
+  }
+}
 
     Future<bool> _checkIfBarcodeColumnExists(Database db) async {
     try {
@@ -140,13 +153,10 @@ class DatabaseHelper {
     }
   }
 
-    Future<int> insertProduct(Map<String, dynamic> product) async {
+ Future<int> insertProduct(Map<String, dynamic> product) async {
     final db = await database;
-    
-    // 🆕 پشکنین بۆ ئەوەی خانەی barcode هەیە یان نا
     final hasBarcodeColumn = await _checkIfBarcodeColumnExists(db);
     
-    // 🆕 دروستکردنی mapێکی پاک
     final Map<String, dynamic> cleanProduct = {
       'name': product['name'],
       'buy_price': product['buy_price'],
@@ -155,23 +165,26 @@ class DatabaseHelper {
       'created_at': product['created_at'],
     };
     
-    // 🆕 زیادکردنی barcode تەنها ئەگەر خانەکە هەبێت
     if (hasBarcodeColumn && product['barcode'] != null) {
       cleanProduct['barcode'] = product['barcode'];
     }
     
+    // 🆕 زیادکردنی نرخی جوملە
+    if (product['wholesale_price'] != null) {
+      cleanProduct['wholesale_price'] = product['wholesale_price'];
+    }
+    
     return await db.insert('products', cleanProduct);
-  }
+}
 
 Future<List<Map<String, dynamic>>> getProducts() async {
   final db = await database;
   return await db.query('products', orderBy: 'name ASC');
 }
 
-  Future<int> updateProduct(int id, Map<String, dynamic> product) async {
+Future<int> updateProduct(int id, Map<String, dynamic> product) async {
   final db = await database;
   
-  // دروستکردنی mapێکی پاک
   final Map<String, dynamic> cleanProduct = {
     'name': product['name'],
     'buy_price': product['buy_price'],
@@ -180,11 +193,15 @@ Future<List<Map<String, dynamic>>> getProducts() async {
     'created_at': product['created_at'],
   };
   
-  // زیادکردنی barcode تەنها ئەگەر هەبێت
   if (product['barcode'] != null) {
     cleanProduct['barcode'] = product['barcode'];
   } else {
     cleanProduct['barcode'] = null;
+  }
+  
+  // 🆕 زیادکردنی نرخی جوملە
+  if (product['wholesale_price'] != null) {
+    cleanProduct['wholesale_price'] = product['wholesale_price'];
   }
   
   return await db.update(
@@ -272,6 +289,8 @@ Future<List<Map<String, dynamic>>> getProducts() async {
       'profit': profit,
     };
   }
+
+  
 
   Future close() async {
     final db = await database;

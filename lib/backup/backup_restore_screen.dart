@@ -68,21 +68,21 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       setState(() => _progress = 0.8);
       final debts = await _dbHelper.getDebts();
 
-      // درووستکردنی ئۆبجێکتی باکئەپ
-      final backupData = {
-        'backup_date': DateTime.now().toIso8601String(),
-        'app_version': '1.0.0',
-        'data_count': {
-          'products': products.length,
-          'purchases': purchases.length,
-          'sales': sales.length,
-          'debts': debts.length,
-        },
-        'products': products,
-        'purchases': purchases,
-        'sales': sales,
-        'debts': debts,
-      };
+     // درووستکردنی ئۆبجێکتی باکئەپ
+final backupData = {
+  'backup_date': DateTime.now().toIso8601String(),
+  'app_version': '1.0.0',
+  'data_count': {
+    'products': products.length,
+    'purchases': purchases.length,
+    'sales': sales.length,
+    'debts': debts.length,
+  },
+  'products': products,
+  'purchases': purchases,
+  'sales': sales,
+  'debts': debts,
+};
 
       // گۆڕینی بۆ JSON
       final jsonString = jsonEncode(backupData);
@@ -108,40 +108,46 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         _progress = 1.0;
       });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.white, size: 20),
-                    SizedBox(width: 8),
-                    Text(
-                      'باکئەپ بە سەرکەوتوویی دروست کرا!',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${products.length} کاڵا, ${sales.length} فرۆشتن, ${debts.length} قەرز',
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.green.shade600,
-            duration: const Duration(seconds: 4),
-            action: SnackBarAction(
-              label: 'هاوبەشکردن',
-              textColor: Colors.white,
-              onPressed: () => _shareBackupFile(file.path),
-            ),
+if (mounted) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'باکئەپ بە سەرکەوتوویی دروست کرا!',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
           ),
-        );
-      }
+          const SizedBox(height: 4),
+          Text(
+            '${products.length} کاڵا, ${sales.length} فرۆشتن, ${debts.length} قەرز',
+            style: const TextStyle(fontSize: 12),
+          ),
+          // 🆕 زیادکراوە
+          const SizedBox(height: 4),
+          Text(
+            'خانەی جوملە: پارێزراو',
+            style: const TextStyle(fontSize: 11, color: Colors.white70),
+          ),
+        ],
+      ),
+      backgroundColor: Colors.green.shade600,
+      duration: const Duration(seconds: 4),
+      action: SnackBarAction(
+        label: 'هاوبەشکردن',
+        textColor: Colors.white,
+        onPressed: () => _shareBackupFile(file.path),
+      ),
+    ),
+  );
+}
 
       // دوای 1 چرکە بگەڕێتەوە بۆ سفر
       await Future.delayed(const Duration(milliseconds: 1000));
@@ -267,10 +273,19 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       final jsonString = await file.readAsString();
       final backupData = jsonDecode(jsonString);
 
-      // پشکنینی دروستی فایل
-      if (!backupData.containsKey('products') || !backupData.containsKey('sales')) {
-        throw Exception('فایلی باکئەپ نادروستە یان کەمە');
-      }
+    // پشکنینی دروستی فایل
+if (!backupData.containsKey('products') || !backupData.containsKey('sales')) {
+  throw Exception('فایلی باکئەپ نادروستە یان کەمە');
+}
+
+// 🆕 پشکنینی خانەی wholesale_price
+final firstProduct = backupData['products'].first;
+if (!firstProduct.containsKey('wholesale_price')) {
+  // ئەگەر باکئەپ کۆنە، خانەی wholesale_price زیاد بکە
+  for (var product in backupData['products']) {
+    product['wholesale_price'] = null;
+  }
+}
 
       setState(() => _progress = 0.2);
 
@@ -287,18 +302,19 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       await db.delete('debt_payments');
       setState(() => _progress = 0.8);
 
-      // گەڕاندنەوەی کاڵاکان
-      final products = backupData['products'] as List;
-      for (var product in products) {
-        await db.insert('products', {
-          'name': product['name'],
-          'barcode': product['barcode'],
-          'buy_price': product['buy_price'],
-          'sell_price': product['sell_price'],
-          'quantity': product['quantity'],
-          'created_at': product['created_at'] ?? DateTime.now().toIso8601String(),
-        });
-      }
+   // گەڕاندنەوەی کاڵاکان
+final products = backupData['products'] as List;
+for (var product in products) {
+  await db.insert('products', {
+    'name': product['name'],
+    'barcode': product['barcode'],
+    'buy_price': product['buy_price'],
+    'sell_price': product['sell_price'],
+    'wholesale_price': product['wholesale_price'], // 🆕 زیادکراوە
+    'quantity': product['quantity'],
+    'created_at': product['created_at'] ?? DateTime.now().toIso8601String(),
+  });
+}
 
       setState(() => _progress = 0.85);
 
@@ -348,42 +364,41 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
 
       setState(() => _progress = 1.0);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
+if (mounted) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Row(
+        children: [
+          const Icon(Icons.check_circle, color: Colors.white, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.check_circle, color: Colors.white, size: 24),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'باکئەپ بە سەرکەوتوویی گەڕایەوە!',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        '${products.length} کاڵا, ${sales.length} فرۆشتن گەڕێنرانەوە',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ],
-                  ),
+                const Text(
+                  'باکئەپ بە سەرکەوتوویی گەڕایەوە!',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  '${products.length} کاڵا, ${sales.length} فرۆشتن گەڕێنرانەوە',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                // 🆕 زیادکراوە
+                const Text(
+                  'خانەی جوملە: گەڕێنرایەوە',
+                  style: TextStyle(fontSize: 11, color: Colors.white70),
                 ),
               ],
             ),
-            backgroundColor: Colors.green.shade600,
-            duration: const Duration(seconds: 4),
           ),
-        );
-
-        // دوای 2 چرکە بگەڕێتەوە بۆ سەرەوە
-        await Future.delayed(const Duration(seconds: 2));
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
-      }
+        ],
+      ),
+      backgroundColor: Colors.green.shade600,
+      duration: const Duration(seconds: 4),
+    ),
+  );
+}
 
     } catch (e) {
       if (mounted) {

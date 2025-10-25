@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import 'package:flutter/services.dart';
 import 'barcode_scanner_screen.dart';
+
 class PurchasesScreen extends StatefulWidget {
   const PurchasesScreen({super.key});
 
@@ -31,95 +32,86 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     super.dispose();
   }
 
-void _filterProducts() {
-  final query = _searchController.text.toLowerCase();
-  if (mounted) {
-    setState(() {
-      if (query.isEmpty) {
-        _filteredProducts = List.from(_products);
-      } else {
-        _filteredProducts = _products.where((product) {
-          final name = product['name'].toString().toLowerCase();
-          final barcode = product['barcode']?.toString().toLowerCase() ?? '';
-          
-          // 🆕 گەڕان بە ناو یان باڕکۆد
-          return name.contains(query) || barcode.contains(query);
-        }).toList();
-      }
-    });
+  void _filterProducts() {
+    final query = _searchController.text.toLowerCase();
+    if (mounted) {
+      setState(() {
+        if (query.isEmpty) {
+          _filteredProducts = _products.map((p) => Map<String, dynamic>.from(p)).toList();
+        } else {
+          _filteredProducts = _products.where((product) {
+            final name = product['name'].toString().toLowerCase();
+            final barcode = product['barcode']?.toString().toLowerCase() ?? '';
+            return name.contains(query) || barcode.contains(query);
+          }).map((p) => Map<String, dynamic>.from(p)).toList();
+        }
+      });
+    }
   }
-}
 
-
-// 🆕 فەنکشنی گەڕان بە باڕکۆد
-// ✅ کۆدی ڕاست
-void _searchByBarcode(String barcode) {
-  try {
-    final product = _products.firstWhere(
-      (p) => p['barcode']?.toString() == barcode,
-    );
-
-    _showProductDetails(product);
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('کاڵایەک بەم باڕکۆدە نەدۆزرایەوە'),
-        backgroundColor: Colors.orange,
-      ),
-    );
+  void _searchByBarcode(String barcode) {
+    try {
+      final product = _products.firstWhere(
+        (p) => p['barcode']?.toString() == barcode,
+      );
+      _showProductDetails(product);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('کاڵایەک بەم باڕکۆدە نەدۆزرایەوە'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
   }
-}
 
-
-void _showProductDetails(Map<String, dynamic> product) {
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(product['name']),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('ناو: ${product['name']}'),
-          if (product['barcode'] != null) 
-            Text('باڕکۆد: ${product['barcode']}'),
-          Text('نرخی کڕین: ${_formatNumber(product['buy_price'])} IQD'),
-          Text('نرخی فرۆشتن: ${_formatNumber(product['sell_price'])} IQD'),
-          Text('بڕ: ${_formatNumber(product['quantity'])} دانە'),
+  void _showProductDetails(Map<String, dynamic> product) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(product['name']),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('ناو: ${product['name']}'),
+            if (product['barcode'] != null) 
+              Text('باڕکۆد: ${product['barcode']}'),
+            Text('نرخی کڕین: ${_formatNumber(product['buy_price'])} IQD'),
+            Text('نرخی فرۆشتن: ${_formatNumber(product['sell_price'])} IQD'),
+            Text('بڕ: ${_formatNumber(product['quantity'])} دانە'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('داخستن'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showEditProductDialog(product);
+            },
+            child: const Text('دەستکاری'),
+          ),
         ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('داخستن'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            Navigator.pop(context);
-            _showEditProductDialog(product);
+    );
+  }
+
+  Future<void> _openBarcodeScannerForSearch() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BarcodeScannerScreen(
+          onBarcodeScanned: (barcode) {
+            _searchByBarcode(barcode);
           },
-          child: const Text('دەستکاری'),
+          title: 'سکانی باڕکۆد بۆ گەڕان',
         ),
-      ],
-    ),
-  );
-}
-
-
-Future<void> _openBarcodeScannerForSearch() async {
-  final result = await Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => BarcodeScannerScreen(
-        onBarcodeScanned: (barcode) {
-          // گەڕان بە باڕکۆد
-          _searchByBarcode(barcode);
-        },
-        title: 'سکانی باڕکۆد بۆ گەڕان',
       ),
-    ),
-  );
-}
+    );
+  }
 
   Future<void> _openBarcodeScanner() async {
     final result = await Navigator.push(
@@ -138,51 +130,53 @@ Future<void> _openBarcodeScannerForSearch() async {
     );
   }
 
-// ✅ کۆدی ڕاست
-Future<void> _scanBarcodeInForm(TextEditingController barcodeController) async {
-  if (!mounted) return;
-  
-  await Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => BarcodeScannerScreen(
-        onBarcodeScanned: (barcode) {
-          barcodeController.text = barcode;
-          // نوێکردنەوەی UI دوای گەڕانەوە
-          if (mounted) {
-            setState(() {});
-          }
-        },
-        title: 'سکانی باڕکۆد بۆ کاڵا',
+  Future<void> _scanBarcodeInForm(TextEditingController barcodeController) async {
+    if (!mounted) return;
+    
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BarcodeScannerScreen(
+          onBarcodeScanned: (barcode) {
+            barcodeController.text = barcode;
+            if (mounted) {
+              setState(() {});
+            }
+          },
+          title: 'سکانی باڕکۆد بۆ کاڵا',
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Future<void> _loadData() async {
-  if (!mounted) return;
-  setState(() => _isLoading = true);
-  
-  try {
-    _products = await _dbHelper.getProducts();
-    _filteredProducts = List.from(_products);
-    _purchases = await _dbHelper.getPurchases();
+    if (!mounted) return;
+    setState(() => _isLoading = true);
     
-    for (var purchase in _purchases) {
-      final product = _products.firstWhere(
-        (p) => p['id'] == purchase['product_id'],
-        orElse: () => {'name': 'نەدۆزرایەوە'},
-      );
-      purchase['product_name'] = product['name'];
-    }
-  } catch (e) {
-    print('هەڵە لە بارکردنی داتا: $e');
-  } finally {
-    if (mounted) {
-      setState(() => _isLoading = false);
+    try {
+      // ✅ گۆڕین بۆ List<Map<String, dynamic>> بۆ ئەوەی بتوانرێت بگۆڕدرێت
+      final tempProducts = await _dbHelper.getProducts();
+      _products = tempProducts.map((p) => Map<String, dynamic>.from(p)).toList();
+      _filteredProducts = _products.map((p) => Map<String, dynamic>.from(p)).toList();
+      
+      final tempPurchases = await _dbHelper.getPurchases();
+      _purchases = tempPurchases.map((p) => Map<String, dynamic>.from(p)).toList();
+      
+      for (var purchase in _purchases) {
+        final product = _products.firstWhere(
+          (p) => p['id'] == purchase['product_id'],
+          orElse: () => {'name': 'نەدۆزرایەوە'},
+        );
+        purchase['product_name'] = product['name'];
+      }
+    } catch (e) {
+      print('هەڵە لە بارکردنی داتا: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
-}
 
   String _formatNumber(dynamic number) {
     final formatter = NumberFormat('#,###');
@@ -194,403 +188,474 @@ Future<void> _scanBarcodeInForm(TextEditingController barcodeController) async {
     return number.toString();
   }
 
-  
+  void _showAddProductDialog() {
+    final nameController = TextEditingController();
+    final barcodeController = TextEditingController();
+    final buyPriceController = TextEditingController();
+    final sellPriceController = TextEditingController();
+    final wholesalePriceController = TextEditingController();
+    final quantityController = TextEditingController();
 
-void _showAddProductDialog() {
-  final nameController = TextEditingController();
-  final barcodeController = TextEditingController();
-  final buyPriceController = TextEditingController();
-  final sellPriceController = TextEditingController();
-  final quantityController = TextEditingController();
-
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('زیادکردنی کاڵای نوێ'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'ناوی کاڵا',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.shopping_bag),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: barcodeController,
-              decoration: InputDecoration(
-                labelText: 'باڕکۆد (ئارەزوومەندانە)',
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.qr_code),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.camera_alt),
-                  onPressed: () => _scanBarcodeInForm(barcodeController),
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('زیادکردنی کاڵای نوێ'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'ناوی کاڵا',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.shopping_bag),
                 ),
               ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: buyPriceController,
-              decoration: const InputDecoration(
-                labelText: 'نرخی کڕین',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.money),
-                suffixText: 'IQD',
-              ),
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                CurrencyInputFormatter(),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: sellPriceController,
-              decoration: const InputDecoration(
-                labelText: 'نرخی فرۆشتن',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.sell),
-                suffixText: 'IQD',
-              ),
-              keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                CurrencyInputFormatter(),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: quantityController,
-              decoration: const InputDecoration(
-                labelText: 'بڕ (ژمارەی کاڵا)',
-                hintText: '0',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.inventory),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('پاشگەزبوونەوە'),
-        ),
-        ElevatedButton(
-          onPressed: () async {
-            if (nameController.text.isEmpty ||
-                buyPriceController.text.isEmpty ||
-                sellPriceController.text.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('تکایە هەموو خانەکان پڕبکەرەوە')),
-              );
-              return;
-            }
-
-            // پشکنینی باڕکۆدی دووبارە
-            if (barcodeController.text.isNotEmpty) {
-              final existingProduct = _products.firstWhere(
-                (p) => p['barcode']?.toString() == barcodeController.text,
-                orElse: () => {},
-              );
-              if (existingProduct.isNotEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('باڕکۆدەکە پێشتر تۆمارکراوە'),
-                    backgroundColor: Colors.orange,
+              const SizedBox(height: 12),
+              TextField(
+                controller: barcodeController,
+                decoration: InputDecoration(
+                  labelText: 'باڕکۆد (ئارەزوومەندانە)',
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.qr_code),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.camera_alt),
+                    onPressed: () => _scanBarcodeInForm(barcodeController),
                   ),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: buyPriceController,
+                decoration: const InputDecoration(
+                  labelText: 'نرخی کڕین',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.money),
+                  suffixText: 'IQD',
+                ),
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  CurrencyInputFormatter(),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: sellPriceController,
+                decoration: const InputDecoration(
+                  labelText: 'نرخی فرۆشتن',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.sell),
+                  suffixText: 'IQD',
+                ),
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  CurrencyInputFormatter(),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: wholesalePriceController,
+                decoration: const InputDecoration(
+                  labelText: 'نرخی جوملە (ئارەزوومەندانە)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.inventory_2),
+                  suffixText: 'IQD',
+                  hintText: 'نرخی فرۆشتنی کۆمەڵ',
+                ),
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  CurrencyInputFormatter(),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: quantityController,
+                decoration: const InputDecoration(
+                  labelText: 'بڕ (ژمارەی کاڵا)',
+                  hintText: '0',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.inventory),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('پاشگەزبوونەوە'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (nameController.text.isEmpty ||
+                  buyPriceController.text.isEmpty ||
+                  sellPriceController.text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تکایە هەموو خانەکان پڕبکەرەوە')),
                 );
                 return;
               }
-            }
 
-            String cleanBuyPrice = buyPriceController.text.replaceAll(',', '');
-            String cleanSellPrice = sellPriceController.text.replaceAll(',', '');
-
-            final product = {
-              'name': nameController.text,
-              'barcode': barcodeController.text.isEmpty ? null : barcodeController.text,
-              'buy_price': double.parse(cleanBuyPrice),
-              'sell_price': double.parse(cleanSellPrice),
-              'quantity': int.parse(quantityController.text),
-              'created_at': DateTime.now().toIso8601String(),
-            };
-
-            final id = await _dbHelper.insertProduct(product);
-            product['id'] = id;
-            
-            Navigator.pop(context); // داخستنی دیالۆگی زیادکردن
-            
-            // 🆕 نوێکردنەوەی لیستەکان یەکسەر
-            if (mounted) {
-              setState(() {
-                _products = [..._products, product];
-                _filterProducts();
-              });
-            }
-            
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('کاڵاکە بە سەرکەوتوویی زیادکرا')),
-              );
-            }
-          },
-          child: const Text('زیادکردن'),
-        ),
-      ],
-    ),
-  );
-}
-
-  void _showEditProductDialog(Map<String, dynamic> product) {
-  final nameController = TextEditingController(text: product['name']);
-  final barcodeController = TextEditingController(text: product['barcode']?.toString() ?? '');
-  final buyPriceController = TextEditingController(text: product['buy_price'].toString());
-  final sellPriceController = TextEditingController(text: product['sell_price'].toString());
-  final quantityController = TextEditingController(text: product['quantity'].toString());
-
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('دەستکاری کاڵا'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'ناوی کاڵا',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.shopping_bag),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: barcodeController,
-              decoration: InputDecoration(
-                labelText: 'باڕکۆد',
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.qr_code),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.camera_alt),
-                  onPressed: () => _scanBarcodeInForm(barcodeController),
-                ),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: buyPriceController,
-              decoration: const InputDecoration(
-                labelText: 'نرخی کڕین',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.money),
-                suffixText: 'IQD',
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: sellPriceController,
-              decoration: const InputDecoration(
-                labelText: 'نرخی فرۆشتن',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.sell),
-                suffixText: 'IQD',
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: quantityController,
-              decoration: const InputDecoration(
-                labelText: 'بڕ',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.inventory),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('پاشگەزبوونەوە'),
-        ),
-        ElevatedButton(
-          onPressed: () async {
-            if (nameController.text.isEmpty ||
-                buyPriceController.text.isEmpty ||
-                sellPriceController.text.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('تکایە هەموو خانەکان پڕبکەرەوە')),
-              );
-              return;
-            }
-
-            // پشکنینی باڕکۆدی دووبارە (جگە لە خۆی)
-            if (barcodeController.text.isNotEmpty) {
-              final existingProduct = _products.firstWhere(
-                (p) => p['barcode']?.toString() == barcodeController.text && p['id'] != product['id'],
-                orElse: () => {},
-              );
-              if (existingProduct.isNotEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('باڕکۆدەکە پێشتر بۆ کاڵایەکی تر تۆمارکراوە'),
-                    backgroundColor: Colors.orange,
-                  ),
+              if (barcodeController.text.isNotEmpty) {
+                final existingProduct = _products.firstWhere(
+                  (p) => p['barcode']?.toString() == barcodeController.text,
+                  orElse: () => {},
                 );
-                return;
+                if (existingProduct.isNotEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('باڕکۆدەکە پێشتر تۆمارکراوە'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
               }
-            }
 
-            final updatedProduct = {
-              'id': product['id'],
-              'name': nameController.text,
-              'barcode': barcodeController.text.isEmpty ? null : barcodeController.text,
-              'buy_price': double.parse(buyPriceController.text),
-              'sell_price': double.parse(sellPriceController.text),
-              'quantity': int.parse(quantityController.text),
-              'created_at': product['created_at'],
-            };
+              String cleanBuyPrice = buyPriceController.text.replaceAll(',', '');
+              String cleanSellPrice = sellPriceController.text.replaceAll(',', '');
+              String? cleanWholesalePrice = wholesalePriceController.text.isNotEmpty 
+                  ? wholesalePriceController.text.replaceAll(',', '') 
+                  : null;
 
-            await _dbHelper.updateProduct(product['id'], updatedProduct);
-            
-            // 🆕 نوێکردنەوەی لیستەکان یەکسەر
-            if (mounted) {
-              setState(() {
-                // نوێکردنەوە لە لیستی سەرەکی
-                final mainIndex = _products.indexWhere((p) => p['id'] == product['id']);
-                if (mainIndex != -1) {
-                  _products[mainIndex] = updatedProduct;
-                }
-                
-                // نوێکردنەوە لە لیستی فلتەرکراو
-                final filteredIndex = _filteredProducts.indexWhere((p) => p['id'] == product['id']);
-                if (filteredIndex != -1) {
-                  _filteredProducts[filteredIndex] = updatedProduct;
-                }
-                
-                // نوێکردنەوەی فلتەر
-                _filterProducts();
-              });
-            }
-            
-            Navigator.pop(context); // داخستنی دیالۆگی دەستکاری
-            
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('کاڵاکە بە سەرکەوتوویی نوێکرایەوە')),
-              );
-            }
-          },
-          child: const Text('نوێکردنەوە'),
-        ),
-      ],
-    ),
-  );
-}
+              final product = {
+                'name': nameController.text,
+                'barcode': barcodeController.text.isEmpty ? null : barcodeController.text,
+                'buy_price': double.parse(cleanBuyPrice),
+                'sell_price': double.parse(cleanSellPrice),
+                'wholesale_price': cleanWholesalePrice != null ? double.parse(cleanWholesalePrice) : null,
+                'quantity': int.parse(quantityController.text),
+                'created_at': DateTime.now().toIso8601String(),
+              };
 
-void _showDeleteConfirmDialog(Map<String, dynamic> product) {
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('سڕینەوە'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('دڵنیایت لە سڕینەوەی "${product['name']}"؟'),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.orange.shade50,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.warning, color: Colors.orange, size: 18),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'مێژووی فرۆشتنەکانی ئەم کاڵایە دەمێنێتەوە',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
+              final id = await _dbHelper.insertProduct(product);
+              product['id'] = id;
+              
+              Navigator.pop(context);
+              
+              if (mounted) {
+                setState(() {
+                  // ✅ دروستکردنی لیستی نوێ بە Map.from
+                  _products = [..._products.map((p) => Map<String, dynamic>.from(p)), Map<String, dynamic>.from(product)];
+                  _filterProducts();
+                });
+              }
+              
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('کاڵاکە بە سەرکەوتوویی زیادکرا')),
+                );
+              }
+            },
+            child: const Text('زیادکردن'),
           ),
         ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('نەخێر'),
-        ),
-        ElevatedButton(
-         onPressed: () async {
-  try {
-    // Close the dialog first
-    Navigator.pop(context);
-    
-    // Show loading indicator
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تکایە چاوەڕێ بە...'),
-          duration: Duration(seconds: 1),
-        ),
-      );
-    }
-    
-    final db = await _dbHelper.database;
-    
-    // ✅ یەکەم: سڕینەوەی کڕینەکان (پێش کاڵا)
-    await db.delete('purchases', where: 'product_id = ?', whereArgs: [product['id']]);
-    
-    // ✅ دووەم: سڕینەوەی کاڵا
-    await db.delete('products', where: 'id = ?', whereArgs: [product['id']]);
-    
-    // ✅ نوێکردنەوەی لیستەکان
-    await _loadData(); // Reload all data instead of manual removal
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('"${product['name']}" بە سەرکەوتووی سڕایەوە'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
-  } catch (e) {
-    print('❌ هەڵە لە سڕینەوە: $e');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('هەڵە لە سڕینەوە: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+    );
   }
-},
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-          child: const Text('بەڵێ، بیسڕەوە'),
+
+  String _formatPriceForInput(dynamic price) {
+    if (price == null) return '';
+    
+    if (price is double) {
+      if (price == price.truncateToDouble()) {
+        return price.toInt().toString();
+      }
+      return price.toString();
+    }
+    
+    if (price is int) {
+      return price.toString();
+    }
+    
+    return price.toString().replaceAll('.0', '');
+  }
+
+  void _showEditProductDialog(Map<String, dynamic> product) {
+    final nameController = TextEditingController(text: product['name']);
+    final barcodeController = TextEditingController(text: product['barcode']?.toString() ?? '');
+    
+    // ✅ فۆرماتکردنی ژمارەکان بە کۆما
+    final buyPriceController = TextEditingController(
+      text: _formatNumber(product['buy_price'])
+    );
+    final sellPriceController = TextEditingController(
+      text: _formatNumber(product['sell_price'])
+    );
+    final wholesalePriceController = TextEditingController(
+      text: product['wholesale_price'] != null 
+          ? _formatNumber(product['wholesale_price'])
+          : ''
+    );
+    
+    final quantityController = TextEditingController(text: product['quantity'].toString());
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('دەستکاری کاڵا'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'ناوی کاڵا',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.shopping_bag),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: barcodeController,
+                decoration: InputDecoration(
+                  labelText: 'باڕکۆد',
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.qr_code),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.camera_alt),
+                    onPressed: () => _scanBarcodeInForm(barcodeController),
+                  ),
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: buyPriceController,
+                decoration: const InputDecoration(
+                  labelText: 'نرخی کڕین',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.money),
+                  suffixText: 'IQD',
+                ),
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  CurrencyInputFormatter(), // ✅ زیادکردنی فۆرماتکەر
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: sellPriceController,
+                decoration: const InputDecoration(
+                  labelText: 'نرخی فرۆشتن',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.sell),
+                  suffixText: 'IQD',
+                ),
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  CurrencyInputFormatter(), // ✅ زیادکردنی فۆرماتکەر
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: wholesalePriceController,
+                decoration: const InputDecoration(
+                  labelText: 'نرخی جوملە (ئارەزوومەندانە)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.inventory_2),
+                  suffixText: 'IQD',
+                ),
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  CurrencyInputFormatter(), // ✅ زیادکردنی فۆرماتکەر
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: quantityController,
+                decoration: const InputDecoration(
+                  labelText: 'بڕ',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.inventory),
+                ),
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                ],
+              ),
+            ],
+          ),
         ),
-      ],
-    ),
-  );
-}
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('پاشگەزبوونەوە'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (nameController.text.isEmpty ||
+                  buyPriceController.text.isEmpty ||
+                  sellPriceController.text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تکایە هەموو خانەکان پڕبکەرەوە')),
+                );
+                return;
+              }
+
+              if (barcodeController.text.isNotEmpty) {
+                final existingProduct = _products.firstWhere(
+                  (p) => p['barcode']?.toString() == barcodeController.text && p['id'] != product['id'],
+                  orElse: () => {},
+                );
+                if (existingProduct.isNotEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('باڕکۆدەکە پێشتر بۆ کاڵایەکی تر تۆمارکراوە'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+              }
+
+              // ✅ لابردنی کۆما پێش پاشەکەوتکردن
+              final cleanBuyPrice = buyPriceController.text.replaceAll(',', '');
+              final cleanSellPrice = sellPriceController.text.replaceAll(',', '');
+              final cleanWholesalePrice = wholesalePriceController.text.isNotEmpty 
+                  ? wholesalePriceController.text.replaceAll(',', '')
+                  : null;
+
+              final updatedProduct = {
+                'id': product['id'],
+                'name': nameController.text,
+                'barcode': barcodeController.text.isEmpty ? null : barcodeController.text,
+                'buy_price': double.parse(cleanBuyPrice),
+                'sell_price': double.parse(cleanSellPrice),
+                'wholesale_price': cleanWholesalePrice != null 
+                    ? double.parse(cleanWholesalePrice) 
+                    : null,
+                'quantity': int.parse(quantityController.text),
+                'created_at': product['created_at'],
+              };
+
+              await _dbHelper.updateProduct(product['id'], updatedProduct);
+              
+              // ✅ نوێکردنەوەی لیستەکان بە شێوەی دروست
+              if (mounted) {
+                setState(() {
+                  // دروستکردنی لیستی نوێ لە جیاتی گۆڕینی راستەوخۆ
+                  _products = _products.map((p) {
+                    if (p['id'] == product['id']) {
+                      return Map<String, dynamic>.from(updatedProduct);
+                    }
+                    return Map<String, dynamic>.from(p);
+                  }).toList();
+                  
+                  _filterProducts();
+                });
+              }
+              
+              Navigator.pop(context);
+              
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('کاڵاکە بە سەرکەوتوویی نوێکرایەوە')),
+                );
+              }
+            },
+            child: const Text('نوێکردنەوە'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteConfirmDialog(Map<String, dynamic> product) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('سڕینەوە'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('دڵنیایت لە سڕینەوەی "${product['name']}"؟'),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.warning, color: Colors.orange, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'مێژووی فرۆشتنەکانی ئەم کاڵایە دەمێنێتەوە',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('نەخێر'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                Navigator.pop(context);
+                
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('تکایە چاوەڕێ بە...'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                }
+                
+                final db = await _dbHelper.database;
+                
+                await db.delete('purchases', where: 'product_id = ?', whereArgs: [product['id']]);
+                await db.delete('products', where: 'id = ?', whereArgs: [product['id']]);
+                
+                await _loadData();
+                
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('"${product['name']}" بە سەرکەوتووی سڕایەوە'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                print('❌ هەڵە لە سڕینەوە: $e');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('هەڵە لە سڕینەوە: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('بەڵێ، بیسڕەوە'),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _showAddPurchaseDialog() {
     if (_products.isEmpty) {
@@ -719,7 +784,6 @@ void _showDeleteConfirmDialog(Map<String, dynamic> product) {
 
                 await _dbHelper.insertPurchase(purchase);
 
-                // نوێکردنەوەی بڕی کاڵا لە دەیتابەیس
                 final newQuantity = selectedProduct!['quantity'] + quantity;
                 final updatedProduct = {...selectedProduct!, 'quantity': newQuantity};
                 await _dbHelper.updateProduct(
@@ -727,24 +791,20 @@ void _showDeleteConfirmDialog(Map<String, dynamic> product) {
                   updatedProduct,
                 );
 
-                // نوێکردنەوەی لیست لە کاتی خۆیدا
                 final index = _products.indexWhere((p) => p['id'] == selectedProduct!['id']);
                 if (index != -1) {
-                  _products[index] = updatedProduct;
+                  _products[index] = Map<String, dynamic>.from(updatedProduct);
                 }
 
-                // داخستنی dialog
                 Navigator.pop(context);
 
-                // نوێکردنەوەی UI
                 if (mounted) {
                   setState(() {
                     _filterProducts();
                   });
                 }
 
-                // بارکردنەوەی لیستی کڕینەکان
-                _purchases = await _dbHelper.getPurchases();
+                _purchases = (await _dbHelper.getPurchases()).map((p) => Map<String, dynamic>.from(p)).toList();
                 for (var purchase in _purchases) {
                   final product = _products.firstWhere(
                     (p) => p['id'] == purchase['product_id'],
@@ -771,10 +831,15 @@ void _showDeleteConfirmDialog(Map<String, dynamic> product) {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('کڕینی کاڵا'),
+        backgroundColor: const Color.fromARGB(255, 82, 75, 90),
+        title: const Text('کڕینی کاڵا',style: TextStyle(color: Colors.white),),
+       
+        
+        
         actions: [
           IconButton(
-            icon: const Icon(Icons.add_box),
+            icon: const Icon(Icons.add_business_rounded, color: Colors.white,),
+            
             tooltip: 'زیادکردنی کاڵای نوێ',
             onPressed: _showAddProductDialog,
           ),
@@ -782,7 +847,6 @@ void _showDeleteConfirmDialog(Map<String, dynamic> product) {
       ),
       body: Column(
         children: [
-          // سێرچ بۆکس + دوگمەی باڕکۆد
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: Row(
@@ -824,7 +888,6 @@ void _showDeleteConfirmDialog(Map<String, dynamic> product) {
               ],
             ),
           ),
-          // لیستی کاڵاکان
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -852,160 +915,142 @@ void _showDeleteConfirmDialog(Map<String, dynamic> product) {
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         itemCount: _filteredProducts.length,
                         itemBuilder: (context, index) {
-  final product = _filteredProducts[index];
-  final isLowStock = product['quantity'] < 10;
+                          final product = _filteredProducts[index];
+                          final isLowStock = product['quantity'] < 10;
 
-  return Card(
-    margin: const EdgeInsets.symmetric(vertical: 4),
-    elevation: 2,
-    color: isLowStock ? Colors.red.shade50 : null,
-    child: ListTile(
-      onTap: () => _showEditProductDialog(product),
-      leading: CircleAvatar(
-        backgroundColor: isLowStock
-            ? Colors.red.shade100
-            : Colors.green.shade100,
-        child: Icon(
-          Icons.inventory,
-          color: isLowStock
-              ? Colors.red.shade700
-              : Colors.green.shade700,
-        ),
-      ),
-      title: Text(
-        product['name'],
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 16,
-        ),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              if (product['barcode'] != null) 
-             /*   Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.purple.shade100,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    'باڕکۆد: ${product['barcode']}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.purple.shade700,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              const SizedBox(width: 4), */
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade100,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  'کڕین: ${_formatNumber(product['buy_price'])}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.green.shade700,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade100,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  'فرۆشتن: ${_formatNumber(product['sell_price'])}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.orange.shade700,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Icon(
-                Icons.inventory_2,
-                size: 14,
-                color: isLowStock
-                    ? Colors.red
-                    : Colors.grey.shade600,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'بڕی ماوە: ${_formatNumber(product['quantity'])} دانە',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isLowStock
-                      ? Colors.red
-                      : Colors.grey.shade600,
-                  fontWeight: isLowStock
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                ),
-              ),
-              if (isLowStock) ...[
-                const SizedBox(width: 4),
-                const Text(
-                  '⚠️ کەمە',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.red,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ],
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.edit, size: 20),
-            color: Colors.blue,
-            onPressed: () => _showEditProductDialog(product),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete, size: 20),
-            color: Colors.red,
-            onPressed: () => _showDeleteConfirmDialog(product),
-          ),
-        ],
-      ),
-    ),
-  );
-},
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            elevation: 2,
+                            color: isLowStock ? Colors.red.shade50 : null,
+                            child: ListTile(
+                              onTap: () => _showEditProductDialog(product),
+                              leading: CircleAvatar(
+                                backgroundColor: isLowStock
+                                    ? Colors.red.shade100
+                                    : Colors.green.shade100,
+                                child: Icon(
+                                  Icons.inventory,
+                                  color: isLowStock
+                                      ? Colors.red.shade700
+                                      : Colors.green.shade700,
+                                ),
+                              ),
+                              title: Text(
+                                product['name'],
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      if (product['barcode'] != null) ...[
+                                        const SizedBox(width: 4),
+                                      ],
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green.shade100,
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          'کڕین: ${_formatNumber(product['buy_price'])}',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.green.shade700,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange.shade100,
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          'فرۆشتن: ${_formatNumber(product['sell_price'])}',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.orange.shade700,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.inventory_2,
+                                        size: 14,
+                                        color: isLowStock
+                                            ? Colors.red
+                                            : Colors.grey.shade600,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'بڕی ماوە: ${_formatNumber(product['quantity'])} دانە',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: isLowStock
+                                              ? Colors.red
+                                              : Colors.grey.shade600,
+                                          fontWeight: isLowStock
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                      if (isLowStock) ...[
+                                        const SizedBox(width: 4),
+                                        const Text(
+                                          '⚠️ کەمە',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.red,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, size: 20),
+                                    color: Colors.blue,
+                                    onPressed: () => _showEditProductDialog(product),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, size: 20),
+                                    color: Colors.red,
+                                    onPressed: () => _showDeleteConfirmDialog(product),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
                       ),
           ),
         ],
       ),
     );
   }
-  
 }
 
 class CurrencyInputFormatter extends TextInputFormatter {

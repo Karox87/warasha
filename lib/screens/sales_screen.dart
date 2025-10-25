@@ -174,7 +174,7 @@ void _searchByBarcodeForSale(String barcode) {
     return number.toString();
   }
 
-  void _addToCart(Map<String, dynamic> product) {
+void _addToCart(Map<String, dynamic> product) {
     setState(() {
       final existingIndex = _cart.indexWhere((item) => item['id'] == product['id']);
       
@@ -196,8 +196,10 @@ void _searchByBarcodeForSale(String barcode) {
           'name': product['name'],
           'sell_price': product['sell_price'],
           'buy_price': product['buy_price'],
+          'wholesale_price': product['wholesale_price'], // 🆕
           'max_quantity': product['quantity'],
           'cart_quantity': 1,
+          'is_wholesale': false, // 🆕
         });
       }
     });
@@ -273,45 +275,55 @@ void _searchByBarcodeForSale(String barcode) {
   }
 
   double _getCartTotal() {
-    double total = 0;
-    for (var item in _cart) {
-      total += item['sell_price'] * item['cart_quantity'];
-    }
-    return total;
+  double total = 0;
+  for (var item in _cart) {
+    final isWholesale = item['is_wholesale'] ?? false;
+    final currentPrice = isWholesale && item['wholesale_price'] != null
+        ? item['wholesale_price']
+        : item['sell_price'];
+    total += currentPrice * item['cart_quantity'];
   }
+  return total;
+}
 
-  double _getCartProfit() {
-    double profit = 0;
-    for (var item in _cart) {
-      profit += (item['sell_price'] - item['buy_price']) * item['cart_quantity'];
-    }
-    return profit;
+double _getCartProfit() {
+  double profit = 0;
+  for (var item in _cart) {
+    final isWholesale = item['is_wholesale'] ?? false;
+    final currentPrice = isWholesale && item['wholesale_price'] != null
+        ? item['wholesale_price']
+        : item['sell_price'];
+    profit += (currentPrice - item['buy_price']) * item['cart_quantity'];
   }
+  return profit;
+}
 
   // 🆕 فەنکشنی فرۆشتنی جوملە
-  Future<void> _completeBulkSale({bool isCash = true, String customerName = ''}) async {
+Future<void> _completeBulkSale({bool isCash = true, String customerName = ''}) async {
     if (_cart.isEmpty) return;
 
-    // دروستکردنی ID-ی یەکتا بۆ فرۆشتنی جوملە
     final bulkSaleId = 'BULK_${DateTime.now().millisecondsSinceEpoch}';
     final totalAmount = _getCartTotal();
 
     try {
-      // پاراستنی هەموو کاڵاکانی سەبەتە بە یەک bulk_sale_id
       for (var item in _cart) {
+  final isWholesale = item['is_wholesale'] ?? false;
+final salePrice = isWholesale && item['wholesale_price'] != null
+    ? item['wholesale_price']
+    : item['sell_price'];
+            
         final sale = {
           'product_id': item['id'],
           'product_name': item['name'],
           'buy_price': item['buy_price'],
           'quantity': item['cart_quantity'],
-          'price': item['sell_price'],
-          'total': item['sell_price'] * item['cart_quantity'],
+          'price': salePrice, // 🆕 بەکارهێنانی نرخی دروست
+          'total': salePrice * item['cart_quantity'],
           'date': DateTime.now().toIso8601String(),
-          'bulk_sale_id': bulkSaleId, // 🆕 ID-ی فرۆشتنی جوملە
+          'bulk_sale_id': bulkSaleId,
         };
         await _dbHelper.insertSale(sale);
 
-        // کەمکردنەوەی بڕی کاڵا
         final product = _products.firstWhere((p) => p['id'] == item['id']);
         final newQuantity = product['quantity'] - item['cart_quantity'];
         await _dbHelper.updateProduct(
@@ -320,7 +332,6 @@ void _searchByBarcodeForSale(String barcode) {
         );
       }
 
-      // زیادکردنی قەرز ئەگەر بە قەرز بێت
       if (!isCash) {
         final debt = {
           'customer_name': customerName,
@@ -359,7 +370,7 @@ void _searchByBarcodeForSale(String barcode) {
     }
   }
 
-  void _showCartDialog() {
+void _showCartDialog() {
     if (_cart.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('سەبەتە بەتاڵە! کاڵایەک زیاد بکە')),
@@ -395,7 +406,6 @@ void _searchByBarcodeForSale(String barcode) {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 🆕 بانەری فرۆشتنی جوملە
                 if (_cart.length > 1)
                   Container(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -443,7 +453,11 @@ void _searchByBarcodeForSale(String barcode) {
                     itemCount: _cart.length,
                     itemBuilder: (context, index) {
                       final item = _cart[index];
-                      final itemTotal = item['sell_price'] * item['cart_quantity'];
+                      final isWholesale = item['is_wholesale'] ?? false; // 🆕
+                      final currentPrice = isWholesale && item['wholesale_price'] != null
+                          ? item['wholesale_price']
+                          : item['sell_price']; // 🆕
+                      final itemTotal = currentPrice * item['cart_quantity'];
                       
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 4),
@@ -476,6 +490,22 @@ void _searchByBarcodeForSale(String barcode) {
                                           ],
                                         ),
                                       ),
+                                      // 🆕 دووگمەی جوملە
+                                      if (item['wholesale_price'] != null)
+                                        PopupMenuItem(
+                                          value: 'toggle_wholesale',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                isWholesale ? Icons.person : Icons.inventory_2,
+                                                size: 18,
+                                                color: Colors.blue,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(isWholesale ? 'گۆڕین بۆ تاک' : 'گۆڕین بۆ جوملە'),
+                                            ],
+                                          ),
+                                        ),
                                       const PopupMenuItem(
                                         value: 'remove',
                                         child: Row(
@@ -490,7 +520,13 @@ void _searchByBarcodeForSale(String barcode) {
                                     onSelected: (value) {
                                       if (value == 'edit_price') {
                                         _showEditPriceDialog(index);
-                                      } else if (value == 'remove') {
+                                      } else if (value == 'toggle_wholesale') {
+  // 🆕 گۆڕینی نێوان تاک و جوملە
+  setState(() {
+    _cart[index]['is_wholesale'] = !isWholesale;
+  });
+  setDialogState(() {}); // 🆕 زیادکراوە - نوێکردنەوەی دیالۆگ
+} else if (value == 'remove') {
                                         setState(() => _removeFromCart(index));
                                         setDialogState(() {});
                                       }
@@ -498,6 +534,31 @@ void _searchByBarcodeForSale(String barcode) {
                                   ),
                                 ],
                               ),
+                              // 🆕 نیشاندانی جۆری فرۆشتن
+                              if (isWholesale && item['wholesale_price'] != null)
+                                Container(
+                                  margin: const EdgeInsets.only(top: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade100,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.inventory_2, size: 12, color: Colors.blue.shade700),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'فرۆشتنی جوملە',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               const SizedBox(height: 8),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -549,7 +610,7 @@ void _searchByBarcodeForSale(String barcode) {
                                         child: Row(
                                           children: [
                                             Text(
-                                              '${_formatNumber(item['sell_price'])} IQD',
+                                              '${_formatNumber(currentPrice)} IQD',
                                               style: TextStyle(
                                                 fontSize: 12,
                                                 color: Colors.grey.shade600,
