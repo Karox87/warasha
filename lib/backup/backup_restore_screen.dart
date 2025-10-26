@@ -198,236 +198,250 @@ if (mounted) {
     }
   }
 
-  Future<void> _restoreBackup() async {
-    // دڵنیابوونەوە لە بەکارهێنەر
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber, color: Colors.orange, size: 24),
-            SizedBox(width: 12),
-            Text(
-              'ئاگاداری',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'گەڕاندنەوەی باکئەپ:',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            SizedBox(height: 8),
-            Text('• هەموو داتا ئێستاکان دەسڕێتەوە'),
-            Text('• داتا کۆنەکان لەدەست دەچن'),
-            Text('• کارەکە ناگەڕێتەوە'),
-            SizedBox(height: 12),
-            Text(
-              'دڵنیایت لە بەردەوامبوون؟',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('نەخێر', style: TextStyle(fontSize: 16)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange.shade600,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('بەڵێ، دەمەوێت', style: TextStyle(fontSize: 16)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    setState(() {
-      _isProcessing = true;
-      _progress = 0.0;
-    });
-
-    try {
-      // هەڵبژاردنی فایل
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-        allowMultiple: false,
-      );
-
-      if (result == null || result.files.isEmpty) {
-        setState(() => _isProcessing = false);
-        return;
-      }
-
-      final file = File(result.files.single.path!);
-      final jsonString = await file.readAsString();
-      final backupData = jsonDecode(jsonString);
-
-    // پشکنینی دروستی فایل
-if (!backupData.containsKey('products') || !backupData.containsKey('sales')) {
-  throw Exception('فایلی باکئەپ نادروستە یان کەمە');
-}
-
-// 🆕 پشکنینی خانەی wholesale_price
-final firstProduct = backupData['products'].first;
-if (!firstProduct.containsKey('wholesale_price')) {
-  // ئەگەر باکئەپ کۆنە، خانەی wholesale_price زیاد بکە
-  for (var product in backupData['products']) {
-    product['wholesale_price'] = null;
-  }
-}
-
-      setState(() => _progress = 0.2);
-
-      // سڕینەوەی داتا کۆنەکان
-      final db = await _dbHelper.database;
-      await db.delete('products');
-      setState(() => _progress = 0.4);
-      await db.delete('purchases');
-      setState(() => _progress = 0.5);
-      await db.delete('sales');
-      setState(() => _progress = 0.6);
-      await db.delete('debts');
-      setState(() => _progress = 0.7);
-      await db.delete('debt_payments');
-      setState(() => _progress = 0.8);
-
-   // گەڕاندنەوەی کاڵاکان
-final products = backupData['products'] as List;
-for (var product in products) {
-  await db.insert('products', {
-    'name': product['name'],
-    'barcode': product['barcode'],
-    'buy_price': product['buy_price'],
-    'sell_price': product['sell_price'],
-    'wholesale_price': product['wholesale_price'], // 🆕 زیادکراوە
-    'quantity': product['quantity'],
-    'created_at': product['created_at'] ?? DateTime.now().toIso8601String(),
-  });
-}
-
-      setState(() => _progress = 0.85);
-
-      // گەڕاندنەوەی کڕینەکان
-      final purchases = backupData['purchases'] as List;
-      for (var purchase in purchases) {
-        await db.insert('purchases', {
-          'product_id': purchase['product_id'],
-          'quantity': purchase['quantity'],
-          'price': purchase['price'],
-          'total': purchase['total'],
-          'date': purchase['date'],
-        });
-      }
-
-      setState(() => _progress = 0.9);
-
-      // گەڕاندنەوەی فرۆشتنەکان
-      final sales = backupData['sales'] as List;
-      for (var sale in sales) {
-        await db.insert('sales', {
-          'product_id': sale['product_id'],
-          'product_name': sale['product_name'],
-          'buy_price': sale['buy_price'],
-          'quantity': sale['quantity'],
-          'price': sale['price'],
-          'total': sale['total'],
-          'date': sale['date'],
-          'bulk_sale_id': sale['bulk_sale_id'],
-        });
-      }
-
-      setState(() => _progress = 0.95);
-
-      // گەڕاندنەوەی قەرزەکان
-      final debts = backupData['debts'] as List;
-      for (var debt in debts) {
-        await db.insert('debts', {
-          'customer_name': debt['customer_name'],
-          'amount': debt['amount'],
-          'paid': debt['paid'],
-          'remaining': debt['remaining'],
-          'description': debt['description'],
-          'date': debt['date'],
-        });
-      }
-
-      setState(() => _progress = 1.0);
-
-if (mounted) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Row(
+Future<void> _restoreBackup() async {
+  // دڵنیابوونەوە لە بەکارهێنەر
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Row(
         children: [
-          const Icon(Icons.check_circle, color: Colors.white, size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'باکئەپ بە سەرکەوتوویی گەڕایەوە!',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  '${products.length} کاڵا, ${sales.length} فرۆشتن گەڕێنرانەوە',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                // 🆕 زیادکراوە
-                const Text(
-                  'خانەی جوملە: گەڕێنرایەوە',
-                  style: TextStyle(fontSize: 11, color: Colors.white70),
-                ),
-              ],
-            ),
-          ),
+          Icon(Icons.warning_amber, color: Colors.orange, size: 24),
+          SizedBox(width: 12),
+          Text('ئاگاداری', style: TextStyle(fontWeight: FontWeight.bold)),
         ],
       ),
-      backgroundColor: Colors.green.shade600,
-      duration: const Duration(seconds: 4),
+      content: const Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('گەڕاندنەوەی باکئەپ:', style: TextStyle(fontWeight: FontWeight.w600)),
+          SizedBox(height: 8),
+          Text('• هەموو داتا ئێستاکان دەسڕێتەوە'),
+          Text('• داتا کۆنەکان لەدەست دەچن'),
+          Text('• کارەکە ناگەڕێتەوە'),
+          SizedBox(height: 12),
+          Text('دڵنیایت لە بەردەوامبوون؟', 
+               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('نەخێر', style: TextStyle(fontSize: 16)),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.orange.shade600,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('بەڵێ، دەمەوێت', style: TextStyle(fontSize: 16)),
+        ),
+      ],
     ),
   );
-}
 
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white, size: 24),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'هەڵە لە گەڕاندنەوە: ${e.toString()}',
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.red.shade600,
-            duration: const Duration(seconds: 5),
-          ),
-        );
+  if (confirm != true) return;
+
+  setState(() {
+    _isProcessing = true;
+    _progress = 0.0;
+  });
+
+  try {
+    // هەڵبژاردنی فایل
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+      allowMultiple: false,
+    );
+
+    if (result == null || result.files.isEmpty) {
+      setState(() => _isProcessing = false);
+      return;
+    }
+
+    final file = File(result.files.single.path!);
+    final jsonString = await file.readAsString();
+    final backupData = jsonDecode(jsonString);
+
+    // پشکنینی دروستی فایل
+    if (!backupData.containsKey('products') || !backupData.containsKey('sales')) {
+      throw Exception('فایلی باکئەپ نادروستە یان کەمە');
+    }
+
+    // 🆕 پشکنینی خانەی wholesale_price
+    final firstProduct = backupData['products'].first;
+    if (!firstProduct.containsKey('wholesale_price')) {
+      for (var product in backupData['products']) {
+        product['wholesale_price'] = null;
       }
-    } finally {
-      setState(() {
-        _isProcessing = false;
-        _progress = 0.0;
+    }
+
+    setState(() => _progress = 0.2);
+
+    // سڕینەوەی داتا کۆنەکان
+    final db = await _dbHelper.database;
+    await db.delete('products');
+    setState(() => _progress = 0.4);
+    await db.delete('purchases');
+    setState(() => _progress = 0.5);
+    await db.delete('sales');
+    setState(() => _progress = 0.6);
+    await db.delete('debts');
+    setState(() => _progress = 0.7);
+    await db.delete('debt_payments');
+    setState(() => _progress = 0.8);
+
+    // گەڕاندنەوەی کاڵاکان
+    final products = backupData['products'] as List;
+    for (var product in products) {
+      await db.insert('products', {
+        'name': product['name'],
+        'barcode': product['barcode'],
+        'buy_price': product['buy_price'],
+        'sell_price': product['sell_price'],
+        'wholesale_price': product['wholesale_price'],
+        'quantity': product['quantity'],
+        'created_at': product['created_at'] ?? DateTime.now().toIso8601String(),
       });
     }
+
+    setState(() => _progress = 0.85);
+
+    // گەڕاندنەوەی کڕینەکان
+    final purchases = backupData['purchases'] as List;
+    for (var purchase in purchases) {
+      await db.insert('purchases', {
+        'product_id': purchase['product_id'],
+        'quantity': purchase['quantity'],
+        'price': purchase['price'],
+        'total': purchase['total'],
+        'date': purchase['date'],
+      });
+    }
+
+    setState(() => _progress = 0.9);
+
+    // 🆕 گەڕاندنەوەی فرۆشتنەکان بە buy_price
+    final sales = backupData['sales'] as List;
+    
+    // پشکنینی بوونی buy_price
+    if (sales.isNotEmpty) {
+      final firstSale = sales.first;
+      if (!firstSale.containsKey('buy_price') || firstSale['buy_price'] == null) {
+        print('⚠️ buy_price نییە لە sales، دەیزیادکەین...');
+        
+        // دروستکردنی map بۆ products
+        final productsMap = <int, double>{};
+        for (var product in backupData['products']) {
+          productsMap[product['id']] = product['buy_price'] ?? 0.0;
+        }
+        
+        // زیادکردنی buy_price بۆ هەر sale
+        for (var sale in sales) {
+          final productId = sale['product_id'];
+          sale['buy_price'] = productsMap[productId] ?? 0.0;
+        }
+        
+        print('✅ buy_price زیادکرا بۆ ${sales.length} فرۆشتن');
+      }
+    }
+    
+    // تۆمارکردنی فرۆشتنەکان
+    for (var sale in sales) {
+      await db.insert('sales', {
+        'product_id': sale['product_id'],
+        'product_name': sale['product_name'],
+        'buy_price': sale['buy_price'] ?? 0.0, // 🆕 دڵنیابوون
+        'quantity': sale['quantity'],
+        'price': sale['price'],
+        'total': sale['total'],
+        'date': sale['date'],
+        'bulk_sale_id': sale['bulk_sale_id'],
+      });
+    }
+
+    setState(() => _progress = 0.95);
+
+    // گەڕاندنەوەی قەرزەکان
+    final debts = backupData['debts'] as List;
+    for (var debt in debts) {
+      await db.insert('debts', {
+        'customer_name': debt['customer_name'],
+        'amount': debt['amount'],
+        'paid': debt['paid'],
+        'remaining': debt['remaining'],
+        'description': debt['description'],
+        'date': debt['date'],
+      });
+    }
+
+    setState(() => _progress = 1.0);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white, size: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'باکئەپ بە سەرکەوتوویی گەڕایەوە!',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      '${products.length} کاڵا, ${sales.length} فرۆشتن گەڕێنرانەوە',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    const Text(
+                      'قازانج دروست دەکرێتەوە ✅',
+                      style: TextStyle(fontSize: 11, color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.green.shade600,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white, size: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'هەڵە لە گەڕاندنەوە: ${e.toString()}',
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red.shade600,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+  } finally {
+    setState(() {
+      _isProcessing = false;
+      _progress = 0.0;
+    });
   }
+}
 
   Future<void> _viewBackupInfo() async {
     try {

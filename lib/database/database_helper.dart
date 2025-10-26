@@ -268,27 +268,33 @@ Future<int> updateProduct(int id, Map<String, dynamic> product) async {
     return await db.query('products', orderBy: 'name ASC');
   }
 
-  Future<Map<String, double>> getFinancialReport() async {
-    final db = await database;
-    
-    final purchasesResult = await db.rawQuery('SELECT SUM(total) as total FROM purchases');
-    final totalPurchases = purchasesResult.first['total'] as double? ?? 0.0;
+Future<Map<String, double>> getFinancialReport() async {
+  final db = await database;
+  
+  final purchasesResult = await db.rawQuery('SELECT SUM(total) as total FROM purchases');
+  final totalPurchases = purchasesResult.first['total'] as double? ?? 0.0;
 
-    final salesResult = await db.rawQuery('SELECT SUM(total) as total FROM sales');
-    final totalSales = salesResult.first['total'] as double? ?? 0.0;
+  final salesResult = await db.rawQuery('SELECT SUM(total) as total FROM sales');
+  final totalSales = salesResult.first['total'] as double? ?? 0.0;
 
-    final debtsResult = await db.rawQuery('SELECT SUM(remaining) as total FROM debts');
-    final totalDebts = debtsResult.first['total'] as double? ?? 0.0;
+  final debtsResult = await db.rawQuery('SELECT SUM(remaining) as total FROM debts');
+  final totalDebts = debtsResult.first['total'] as double? ?? 0.0;
 
-    final profit = totalSales - totalPurchases;
+  // 🆕 حیسابکردنی قازانجی راستەقینە (فرۆشتن - کڕین)
+  final profitResult = await db.rawQuery('''
+    SELECT 
+      SUM((s.price - s.buy_price) * s.quantity) as total_profit
+    FROM sales s
+  ''');
+  final profit = profitResult.first['total_profit'] as double? ?? 0.0;
 
-    return {
-      'totalPurchases': totalPurchases,
-      'totalSales': totalSales,
-      'totalDebts': totalDebts,
-      'profit': profit,
-    };
-  }
+  return {
+    'totalPurchases': totalPurchases,
+    'totalSales': totalSales,
+    'totalDebts': totalDebts,
+    'profit': profit, // 🆕 قازانجی راستەقینە
+  };
+}
 
   
 

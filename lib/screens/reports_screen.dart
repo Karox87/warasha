@@ -30,29 +30,29 @@ class _ReportsScreenState extends State<ReportsScreen> {
     _loadData();
   }
 
-  Future<void> _loadData() async {
-    if (!mounted) return;
-    setState(() => _isLoading = true);
-    
-    try {
-      // وەرگرتنی هەموو داتاکان
-      _financialReport = await _dbHelper.getFinancialReport();
-      _products = await _dbHelper.getProducts();
-      
-      // حیساب کردنی ئامارەکانی ئەمڕۆ و ئەم مانگە
-      await _calculateDailyAndMonthlyStats();
-      
-      // دۆزینەوەی بەرزترین کاڵا فرۆشراوەکان
-      await _calculateTopSellingProducts();
-      
-    } catch (e) {
-      _showErrorSnackbar('هەڵە لە بارکردنی داتا: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
+     Future<void> _loadData() async {
+       if (!mounted) return;
+       setState(() => _isLoading = true);
+       
+       try {
+         // وەرگرتنی هەموو داتاکان
+         _financialReport = await _dbHelper.getFinancialReport();
+         _products = await _dbHelper.getProducts();
+         
+         // حیساب کردنی ئامارەکانی ئەمڕۆ و ئەم مانگە
+         await _calculateDailyAndMonthlyStats();
+         
+         // دۆزینەوەی بەرزترین کاڵا فرۆشراوەکان
+         await _calculateTopSellingProducts();
+         
+       } catch (e) {
+         _showErrorSnackbar('هەڵە لە بارکردنی داتا: $e');
+       } finally {
+         if (mounted) {
+           setState(() => _isLoading = false);
+         }
+       }
+     }
 
   Future<void> _calculateDailyAndMonthlyStats() async {
     try {
@@ -167,6 +167,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 18,
+            color: Colors.white
           ),
         ),
         backgroundColor: Colors.blue.shade700,
@@ -174,13 +175,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
         actions: [
           // دوگمەی نوێکردنەوە
           IconButton(
-            icon: const Icon(Icons.refresh, size: 24),
+            icon: const Icon(Icons.refresh, color: Colors.white,size: 24),
             onPressed: _loadData,
             tooltip: 'نوێکردنەوەی داتا',
           ),
           // دوگمەی باکئەپ
           IconButton(
-            icon: const Icon(Icons.backup, size: 24),
+            icon: const Icon(Icons.backup, color: Colors.white,size: 24),
             onPressed: () {
               Navigator.push(
                 context,

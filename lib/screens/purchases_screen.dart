@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import 'package:flutter/services.dart';
 import 'barcode_scanner_screen.dart';
-
+import 'package:url_launcher/url_launcher.dart';
 class PurchasesScreen extends StatefulWidget {
   const PurchasesScreen({super.key});
 
@@ -31,6 +31,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     _searchController.dispose();
     super.dispose();
   }
+
+  
 
   void _filterProducts() {
     final query = _searchController.text.toLowerCase();
@@ -98,6 +100,261 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       ),
     );
   }
+void _showDeveloperDialog() {
+  showDialog(
+    context: context,
+    barrierDismissible: true,
+    builder: (context) => Dialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 400),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: LinearGradient(
+            colors: [Colors.blue.shade700, Colors.blue.shade900],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // سەرپەڕە
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            
+            // ناوەڕۆک
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              child: Column(
+                children: [
+                  // ئایکۆن
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.code,
+                      size: 60,
+                      color: Colors.white,
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  const Text(
+                    'پێویستت بە سیستەمی مۆبایل هەیە؟',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  
+                  const SizedBox(height: 12),
+                  
+                  Text(
+                    'سیستەمی تایبەت بە کۆگا، چێشتخانە، یان بزنسەکەت دروست بکە',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.9),
+                      fontSize: 15,
+                      height: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  
+                  const SizedBox(height: 28),
+                  
+                  // کارتی زانیاری
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.person, color: Colors.blue.shade700, size: 24),
+                            const SizedBox(width: 8),
+                            Text(
+                              'کارۆخ غەفور',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 8),
+                        
+                        Text(
+                          'گەشەپێدەری سیستەمی مۆبایل',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 20),
+                        const Divider(),
+                        const SizedBox(height: 16),
+                        
+                        // دوگمەی پەیوەندی
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            try {
+                              final phone = Uri.parse('tel:+9647502321637');
+                              await launchUrl(phone);
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('هەڵە: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.phone, size: 22),
+                          label: const Text(
+                            '0750 232 16 37',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green.shade600,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 32,
+                              vertical: 16,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 4,
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 12),
+                        
+                        // ✅ دوگمەی WhatsApp - چاککراوە
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            try {
+                              final whatsapp = Uri.parse(
+                                'https://wa.me/9647502321637?text=${Uri.encodeComponent("سڵاو، دەمەوێت سیستەمێک دروست بکەم")}'
+                              );
+                              // ✅ بێ پشکنین - راستەوخۆ کردنەوە
+                              await launchUrl(
+                                whatsapp,
+                                mode: LaunchMode.externalApplication,
+                              );
+                            } catch (e) {
+                              // ئەگەر WhatsApp نەبوو، browser بکەرەوە
+                              try {
+                                final fallbackUrl = Uri.parse('https://wa.me/9647502321637');
+                                await launchUrl(fallbackUrl);
+                              } catch (e2) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('تکایە WhatsApp دامەزرێنە'),
+                                      backgroundColor: Colors.orange,
+                                    ),
+                                  );
+                                }
+                              }
+                            }
+                          },
+                          icon: Icon(Icons.chat, color: Colors.green.shade600),
+                          label: Text(
+                            'پەیوەندی لە WhatsApp',
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: Colors.green.shade600, width: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // تێبینی
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.star, color: Colors.amber.shade300, size: 18),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'خزمەتگوزاری پیشەیی و کوالیتی بەرز',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
 
   Future<void> _openBarcodeScannerForSearch() async {
     final result = await Navigator.push(
@@ -650,7 +907,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('بەڵێ، بیسڕەوە'),
+            child: const Text('بەڵێ، بیسڕەوە',style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -827,24 +1084,27 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color.fromARGB(255, 82, 75, 90),
-        title: const Text('کڕینی کاڵا',style: TextStyle(color: Colors.white),),
-       
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(
+      backgroundColor: const Color.fromARGB(255, 82, 75, 90),
+      title: const Text('کڕینی کاڵا', style: TextStyle(color: Colors.white)),
+      actions: [
+        IconButton(
+    icon: const Icon(Icons.developer_mode_rounded, color: Colors.white),
+    tooltip: 'دەربارەی گەشەپێدەر',
+    onPressed: _showDeveloperDialog,
+  ),
+
+        IconButton(
+          icon: const Icon(Icons.add_business_rounded, color: Colors.white),
+          tooltip: 'زیادکردنی کاڵای نوێ',
+          onPressed: _showAddProductDialog,
+        ),
         
-        
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_business_rounded, color: Colors.white,),
-            
-            tooltip: 'زیادکردنی کاڵای نوێ',
-            onPressed: _showAddProductDialog,
-          ),
-        ],
-      ),
+      ],
+    ),
       body: Column(
         children: [
           Padding(

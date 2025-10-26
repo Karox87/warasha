@@ -11,11 +11,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ئەپی کۆگا',
+      title: 'Koga',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
-        fontFamily: 'Arial', // دەتوانیت فۆنتی کوردی زیاد بکەیت
+        fontFamily: 'NotoKufiArabic', // دەتوانیت فۆنتی کوردی زیاد بکەیت
       ),
       home: const HomeScreen(),
     );

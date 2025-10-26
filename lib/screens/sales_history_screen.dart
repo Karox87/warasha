@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
+import 'package:flutter/services.dart'; // 🆕 ئەمە زیاد بکە
 
 class SalesHistoryScreen extends StatefulWidget {
   const SalesHistoryScreen({super.key});
@@ -712,144 +713,195 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     );
   }
 
-  void _showEditSaleDialog(Map<String, dynamic> sale) {
-    final quantityController = TextEditingController(text: sale['quantity'].toString());
-    final priceController = TextEditingController(text: sale['price'].toString());
+// 🔧 فەنکشنی دەستکاری فرۆشتن لە مێژوو
+// لە sales_history_screen.dart بدۆزەرەوە و بیگۆڕە:
 
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setStateDialog) => AlertDialog(
-          title: const Text('دەستکاری فرۆشتن'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: quantityController,
-                decoration: const InputDecoration(
-                  labelText: 'بڕ',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.shopping_cart),
-                ),
-                keyboardType: TextInputType.number,
-                onChanged: (value) => setStateDialog(() {}),
+void _showEditSaleDialog(Map<String, dynamic> sale) {
+  // 🆕 فۆرماتکردنی ژمارە بۆ پیشاندان (بێ .0 و بە فاریزە)
+  String formatForDisplay(dynamic value) {
+    if (value == null) return '';
+    
+    double numValue;
+    if (value is int) {
+      numValue = value.toDouble();
+    } else if (value is double) {
+      numValue = value;
+    } else {
+      numValue = double.tryParse(value.toString()) ?? 0.0;
+    }
+    
+    // گۆڕینی بۆ int ئەگەر تەواوە
+    if (numValue == numValue.truncateToDouble()) {
+      return NumberFormat('#,###').format(numValue.toInt());
+    }
+    
+    return numValue.toStringAsFixed(0);
+  }
+  
+  final quantityController = TextEditingController(
+    text: sale['quantity'].toString()
+  );
+  final priceController = TextEditingController(
+    text: formatForDisplay(sale['price'])
+  );
+
+  showDialog(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setStateDialog) => AlertDialog(
+        title: const Text('دەستکاری فرۆشتن'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: quantityController,
+              decoration: const InputDecoration(
+                labelText: 'بڕ',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.shopping_cart),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: priceController,
-                decoration: const InputDecoration(
-                  labelText: 'نرخی یەک دانە',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.attach_money),
-                  suffixText: 'IQD',
-                ),
-                keyboardType: TextInputType.number,
-                onChanged: (value) => setStateDialog(() {}),
-              ),
-              const SizedBox(height: 16),
-              if (quantityController.text.isNotEmpty && priceController.text.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('کۆی گشتی:', style: TextStyle(fontWeight: FontWeight.bold)),
-                      Text(
-                        '${_formatNumber((int.tryParse(quantityController.text) ?? 0) * (double.tryParse(priceController.text) ?? 0))} IQD',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.orange.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('پاشگەزبوونەوە'),
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+              ],
+              onChanged: (value) => setStateDialog(() {}),
             ),
-            ElevatedButton(
-              onPressed: () async {
-                if (quantityController.text.isEmpty || priceController.text.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تکایە هەموو خانەکان پڕبکەوە')),
+            const SizedBox(height: 12),
+            TextField(
+              controller: priceController,
+              decoration: const InputDecoration(
+                labelText: 'نرخی یەک دانە',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.attach_money),
+                suffixText: 'IQD',
+                hintText: 'بۆ نموونە: 15,000',
+              ),
+              keyboardType: TextInputType.number,
+              // 🆕 زیادکردنی فۆرماتکەر
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                TextInputFormatter.withFunction((oldValue, newValue) {
+                  if (newValue.text.isEmpty) return newValue;
+                  
+                  final number = int.tryParse(newValue.text.replaceAll(',', ''));
+                  if (number == null) return oldValue;
+                  
+                  final formatted = NumberFormat('#,###').format(number);
+                  
+                  return TextEditingValue(
+                    text: formatted,
+                    selection: TextSelection.collapsed(offset: formatted.length),
                   );
-                  return;
-                }
-
-                final newQuantity = int.parse(quantityController.text);
-                final newPrice = double.parse(priceController.text);
-                final oldQuantity = sale['quantity'];
-
-                final product = _products.firstWhere((p) => p['id'] == sale['product_id']);
-                final quantityDiff = oldQuantity - newQuantity;
-                final updatedProductQuantity = product['quantity'] + quantityDiff;
-
-                await _dbHelper.updateProduct(
-                  sale['product_id'],
-                  {...product, 'quantity': updatedProductQuantity},
+                }),
+              ],
+              onChanged: (value) => setStateDialog(() {}),
+            ),
+            const SizedBox(height: 16),
+            if (quantityController.text.isNotEmpty && priceController.text.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('کۆی گشتی:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text(
+                      '${_formatNumber((int.tryParse(quantityController.text) ?? 0) * (int.tryParse(priceController.text.replaceAll(',', '')) ?? 0))} IQD',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('پاشگەزبوونەوە'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (quantityController.text.isEmpty || priceController.text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تکایە هەموو خانەکان پڕبکەوە')),
                 );
+                return;
+              }
 
-                final db = await _dbHelper.database;
-                await db.update(
-                  'sales',
-                  {
+              final newQuantity = int.parse(quantityController.text);
+              // 🆕 لابردنی فاریزە پێش پاشەکەوت
+              final cleanPrice = priceController.text.replaceAll(',', '');
+              final newPrice = double.parse(cleanPrice);
+              final oldQuantity = sale['quantity'];
+
+              final product = _products.firstWhere((p) => p['id'] == sale['product_id']);
+              final quantityDiff = oldQuantity - newQuantity;
+              final updatedProductQuantity = product['quantity'] + quantityDiff;
+
+              await _dbHelper.updateProduct(
+                sale['product_id'],
+                {...product, 'quantity': updatedProductQuantity},
+              );
+
+              final db = await _dbHelper.database;
+              await db.update(
+                'sales',
+                {
+                  'quantity': newQuantity,
+                  'price': newPrice,
+                  'total': newQuantity * newPrice,
+                },
+                where: 'id = ?',
+                whereArgs: [sale['id']],
+              );
+
+              Navigator.pop(context);
+
+              setState(() {
+                final index = _filteredSales.indexWhere((s) => s['id'] == sale['id']);
+                if (index != -1) {
+                  _filteredSales[index] = {
+                    ..._filteredSales[index],
                     'quantity': newQuantity,
                     'price': newPrice,
                     'total': newQuantity * newPrice,
-                  },
-                  where: 'id = ?',
-                  whereArgs: [sale['id']],
-                );
-
-                Navigator.pop(context);
-
-                setState(() {
-                  final index = _filteredSales.indexWhere((s) => s['id'] == sale['id']);
-                  if (index != -1) {
-                    _filteredSales[index] = {
-                      ..._filteredSales[index],
-                      'quantity': newQuantity,
-                      'price': newPrice,
-                      'total': newQuantity * newPrice,
-                    };
-                  }
-                  
-                  final allIndex = _allSales.indexWhere((s) => s['id'] == sale['id']);
-                  if (allIndex != -1) {
-                    _allSales[allIndex] = {
-                      ..._allSales[allIndex],
-                      'quantity': newQuantity,
-                      'price': newPrice,
-                      'total': newQuantity * newPrice,
-                    };
-                  }
-                });
-
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('فرۆشتنەکە بە سەرکەوتوویی نوێکرایەوە'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
+                  };
                 }
-              },
-              child: const Text('نوێکردنەوە'),
-            ),
-          ],
-        ),
+                
+                final allIndex = _allSales.indexWhere((s) => s['id'] == sale['id']);
+                if (allIndex != -1) {
+                  _allSales[allIndex] = {
+                    ..._allSales[allIndex],
+                    'quantity': newQuantity,
+                    'price': newPrice,
+                    'total': newQuantity * newPrice,
+                  };
+                }
+              });
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('فرۆشتنەکە بە سەرکەوتوویی نوێکرایەوە'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            },
+            child: const Text('نوێکردنەوە'),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   void _showDeleteSaleDialog(Map<String, dynamic> sale) {
     showDialog(
@@ -1049,11 +1101,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('مێژووی فرۆشتن'),
+        title: const Text('مێژووی فرۆشتن',style: TextStyle(color: Colors.white),),
         backgroundColor: Colors.orange,
         actions: [
           // 🆕 چێک بۆکس لە AppBar
-          PopupMenuButton<String>(
+       /*   PopupMenuButton<String>(
             icon: Icon(
               _showOnlyBulkSales ? Icons.filter_alt : Icons.filter_alt_outlined,
               color: _showOnlyBulkSales ? Colors.blue.shade100 : Colors.white,
@@ -1106,16 +1158,16 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                 ),
               ),
             ],
-          ),
+          ), */
           IconButton(
-            icon: Icon(_groupBulkSales ? Icons.view_list : Icons.view_module),
+            icon: Icon(_groupBulkSales ? Icons.view_list : Icons.view_module,color: Colors.white,),
             onPressed: () {
               setState(() => _groupBulkSales = !_groupBulkSales);
             },
             tooltip: _groupBulkSales ? 'بینینی وردەکاری' : 'گروپکردن',
           ),
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh,color: Colors.white,),
             onPressed: _loadData,
             tooltip: 'نوێکردنەوە',
           ),
@@ -1213,7 +1265,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                               labelStyle: TextStyle(
                                 color: _selectedFilter == filter
                                     ? Colors.white
-                                    : Colors.black87,
+                                    : const Color.fromARGB(221, 0, 0, 0),
                                 fontWeight: _selectedFilter == filter
                                     ? FontWeight.bold
                                     : FontWeight.normal,

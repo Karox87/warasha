@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import 'sales_history_screen.dart';
 import 'barcode_scanner_screen.dart';
+import 'package:flutter/services.dart'; // 🆕 زیادکراوە
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
 
@@ -228,51 +229,103 @@ void _addToCart(Map<String, dynamic> product) {
     }
   }
 
-  void _showEditPriceDialog(int index) {
-    final item = _cart[index];
-    final priceController = TextEditingController(text: item['sell_price'].toString());
+// 🔧 فەنکشنی تەواوی دەستکاری نرخ
+// لە sales_screen.dart بدۆزەرەوە و بیگۆڕە بەمە:
+
+void _showEditPriceDialog(int index) {
+  final item = _cart[index];
+  
+  // 🆕 فۆرماتکردنی نرخ بۆ پیشاندان (بێ .0 و بە فاریزە)
+  String formatPriceForDisplay(dynamic price) {
+    if (price == null) return '';
     
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('دەستکاری نرخ'),
-        content: TextField(
-          controller: priceController,
-          decoration: const InputDecoration(
-            labelText: 'نرخی نوێ',
-            border: OutlineInputBorder(),
-            suffixText: 'IQD',
-          ),
-          keyboardType: TextInputType.number,
+    double priceValue;
+    if (price is int) {
+      priceValue = price.toDouble();
+    } else if (price is double) {
+      priceValue = price;
+    } else {
+      priceValue = double.tryParse(price.toString()) ?? 0.0;
+    }
+    
+    // گۆڕینی بۆ int ئەگەر تەواوە
+    if (priceValue == priceValue.truncateToDouble()) {
+      return NumberFormat('#,###').format(priceValue.toInt());
+    }
+    
+    return NumberFormat('#,###').format(priceValue.toInt());
+  }
+  
+  final priceController = TextEditingController(
+    text: formatPriceForDisplay(item['sell_price'])
+  );
+  
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('دەستکاری نرخ'),
+      content: TextField(
+        controller: priceController,
+        decoration: const InputDecoration(
+          labelText: 'نرخی نوێ',
+          border: OutlineInputBorder(),
+          suffixText: 'IQD',
+          hintText: 'بۆ نموونە: 15,000',
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('پاشگەزبوونەوە'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final newPrice = double.tryParse(priceController.text);
-              if (newPrice != null && newPrice > 0) {
-                setState(() {
-                  _cart[index]['sell_price'] = newPrice;
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('نرخی کاڵا نوێکرایەوە')),
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تکایە نرخێکی دروست بنوووسە')),
-                );
-              }
-            },
-            child: const Text('نوێکردنەوە'),
-          ),
+        keyboardType: TextInputType.number,
+        // 🆕 زیادکردنی فۆرماتکەر بۆ نووسین
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly, // تەنها ژمارە
+          TextInputFormatter.withFunction((oldValue, newValue) {
+            if (newValue.text.isEmpty) return newValue;
+            
+            // لابردنی فاریزەکان
+            final cleanText = newValue.text.replaceAll(',', '');
+            final number = int.tryParse(cleanText);
+            
+            if (number == null) return oldValue;
+            
+            // زیادکردنی فاریزە
+            final formatted = NumberFormat('#,###').format(number);
+            
+            return TextEditingValue(
+              text: formatted,
+              selection: TextSelection.collapsed(offset: formatted.length),
+            );
+          }),
         ],
       ),
-    );
-  }
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('پاشگەزبوونەوە'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            // 🆕 لابردنی فاریزە پێش پاشەکەوت
+            final cleanPrice = priceController.text.replaceAll(',', '');
+            final newPrice = double.tryParse(cleanPrice);
+            
+            if (newPrice != null && newPrice > 0) {
+              setState(() {
+                _cart[index]['sell_price'] = newPrice;
+              });
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('نرخی کاڵا نوێکرایەوە')),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('تکایە نرخێکی دروست بنووسە')),
+              );
+            }
+          },
+          child: const Text('نوێکردنەوە'),
+        ),
+      ],
+    ),
+  );
+}
 
   double _getCartTotal() {
   double total = 0;
@@ -746,10 +799,11 @@ void _showCartDialog() {
                 backgroundColor: Colors.orange,
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
-              icon: Icon(_cart.length > 1 ? Icons.inventory : Icons.sell),
+              icon: Icon(_cart.length > 1 ? Icons.inventory : Icons.sell,color: Colors.white,),
               label: Text(
                 _cart.length > 1 ? 'فرۆشتنی جوملە' : 'تەواوکردنی فرۆشتن',
-                style: const TextStyle(fontSize: 16),
+                
+                style: const TextStyle(color: Colors.white,fontSize: 16),
               ),
             ),
           ],
@@ -762,7 +816,7 @@ void _showCartDialog() {
 Widget build(BuildContext context) {
   return Scaffold(
     appBar: AppBar(
-      title: const Text('فرۆشتنی کاڵا'),
+      title: const Text('فرۆشتنی کاڵا',style: TextStyle(color: Colors.white),),
       backgroundColor: Colors.orange,
       actions: [
         // دوگمەی سکانی باڕکۆد بۆ فرۆشتن
@@ -779,7 +833,7 @@ Widget build(BuildContext context) {
         ),
         const SizedBox(width: 8), */
         IconButton(
-          icon: const Icon(Icons.refresh),
+          icon: const Icon(Icons.refresh,color: Colors.white,),
           onPressed: () async {
             await _loadData();
             if (mounted) {
@@ -798,7 +852,7 @@ Widget build(BuildContext context) {
           Stack(
             children: [
               IconButton(
-                icon: const Icon(Icons.shopping_cart),
+                icon: const Icon(Icons.shopping_cart,color: Colors.white,),
                 onPressed: _showCartDialog,
               ),
               Positioned(
@@ -828,7 +882,7 @@ Widget build(BuildContext context) {
             ],
           ),
         IconButton(
-          icon: const Icon(Icons.history),
+          icon: const Icon(Icons.arrow_circle_right,color: Colors.white,),
           onPressed: () {
             Navigator.push(
               context,
