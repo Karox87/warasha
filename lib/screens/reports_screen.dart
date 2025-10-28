@@ -155,10 +155,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final totalDebts = _financialReport['totalDebts'] ?? 0.0;
     final profit = _financialReport['profit'] ?? 0.0;
     
-    double inventoryValue = 0;
-    for (var product in _products) {
-      inventoryValue += (product['buy_price'] as double) * (product['quantity'] as int);
-    }
+ double inventoryValue = 0;  // نرخی فرۆشتنی کۆگا
+double totalPurchaseValue = 0;  // نرخی کڕینی کۆگا
+for (var product in _products) {
+  inventoryValue += (product['sell_price'] as double) * (product['quantity'] as int);
+  totalPurchaseValue += (product['buy_price'] as double) * (product['quantity'] as int);
+}
 
     return Scaffold(
       appBar: AppBar(
@@ -215,7 +217,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     // ئاماری گشتی
                     _buildSectionTitle('ئاماری گشتی'),
                     const SizedBox(height: 12),
-                    _buildGeneralStats(totalPurchases, totalSales, totalDebts, inventoryValue),
+                   _buildGeneralStats(totalPurchaseValue, totalSales, totalDebts, inventoryValue),
                     const SizedBox(height: 24),
                     
                     // بەرزترین کاڵا فرۆشراوەکان

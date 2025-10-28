@@ -65,6 +65,30 @@ Future<void> _openBarcodeScannerForSale() async {
   );
 }
 
+Future<List<Map<String, dynamic>>> _getUniqueDebtors() async {
+  try {
+    final db = await _dbHelper.database;
+    
+    // وەرگرتنی قەرزدارە یەکتاکان کە قەرزیان ماوە
+    final debtors = await db.rawQuery('''
+      SELECT DISTINCT customer_name, 
+             SUM(remaining) as total_remaining,
+             MAX(date) as last_date,
+             COUNT(*) as debt_count
+      FROM debts 
+      WHERE remaining > 0
+      GROUP BY customer_name
+      ORDER BY last_date DESC
+    ''');
+    
+    return debtors;
+  } catch (e) {
+    print('هەڵە لە وەرگرتنی قەرزداران: $e');
+    return [];
+  }
+}
+
+
   // 🆕 فەنکشنی سکانی باڕکۆد بۆ گەڕان
 Future<void> _openBarcodeScannerForSearch() async {
   final result = await Navigator.push(
@@ -352,40 +376,87 @@ double _getCartProfit() {
 }
 
   // 🆕 فەنکشنی فرۆشتنی جوملە
+// 🆕 فەنکشنی پشکنینی قەرزی ماوە بۆ کەسێک
+Future<double> _getCustomerRemainingDebt(String customerName) async {
+  try {
+    final db = await _dbHelper.database;
+    
+    final result = await db.rawQuery('''
+      SELECT SUM(remaining) as total_remaining
+      FROM debts 
+      WHERE customer_name = ? AND remaining > 0
+    ''', [customerName]);
+    
+    final total = result.first['total_remaining'];
+    return total != null ? (total as num).toDouble() : 0.0;
+  } catch (e) {
+    print('هەڵە لە وەرگرتنی قەرزی ماوە: $e');
+    return 0.0;
+  }
+}
+
+// 🆕 نوێکردنەوەی فەنکشنی فرۆشتنی جوملە
 Future<void> _completeBulkSale({bool isCash = true, String customerName = ''}) async {
-    if (_cart.isEmpty) return;
+  if (_cart.isEmpty) return;
 
-    final bulkSaleId = 'BULK_${DateTime.now().millisecondsSinceEpoch}';
-    final totalAmount = _getCartTotal();
+  final bulkSaleId = 'BULK_${DateTime.now().millisecondsSinceEpoch}';
+  final totalAmount = _getCartTotal();
 
-    try {
-      for (var item in _cart) {
-  final isWholesale = item['is_wholesale'] ?? false;
-final salePrice = isWholesale && item['wholesale_price'] != null
-    ? item['wholesale_price']
-    : item['sell_price'];
-            
-        final sale = {
-          'product_id': item['id'],
-          'product_name': item['name'],
-          'buy_price': item['buy_price'],
-          'quantity': item['cart_quantity'],
-          'price': salePrice, // 🆕 بەکارهێنانی نرخی دروست
-          'total': salePrice * item['cart_quantity'],
-          'date': DateTime.now().toIso8601String(),
-          'bulk_sale_id': bulkSaleId,
-        };
-        await _dbHelper.insertSale(sale);
+  try {
+    for (var item in _cart) {
+      final isWholesale = item['is_wholesale'] ?? false;
+      final salePrice = isWholesale && item['wholesale_price'] != null
+          ? item['wholesale_price']
+          : item['sell_price'];
+          
+      final sale = {
+        'product_id': item['id'],
+        'product_name': item['name'],
+        'buy_price': item['buy_price'],
+        'quantity': item['cart_quantity'],
+        'price': salePrice,
+        'total': salePrice * item['cart_quantity'],
+        'date': DateTime.now().toIso8601String(),
+        'bulk_sale_id': bulkSaleId,
+      };
+      await _dbHelper.insertSale(sale);
 
-        final product = _products.firstWhere((p) => p['id'] == item['id']);
-        final newQuantity = product['quantity'] - item['cart_quantity'];
-        await _dbHelper.updateProduct(
-          item['id'],
-          {...product, 'quantity': newQuantity},
-        );
-      }
+      final product = _products.firstWhere((p) => p['id'] == item['id']);
+      final newQuantity = product['quantity'] - item['cart_quantity'];
+      await _dbHelper.updateProduct(
+        item['id'],
+        {...product, 'quantity': newQuantity},
+      );
+    }
 
-      if (!isCash) {
+    if (!isCash && customerName.isNotEmpty) {
+      // 🆕 پشکنینی قەرزی پێشوو
+      final existingDebtAmount = await _getCustomerRemainingDebt(customerName);
+      
+      if (existingDebtAmount > 0) {
+        // ئەگەر قەرزی پێشوو هەیە، زیادیکەی بکە بۆ قەرزە کۆنەکە
+        final debts = await _dbHelper.getDebts();
+        final customerDebts = debts.where((debt) => 
+            debt['customer_name'] == customerName && (debt['remaining'] as double) > 0).toList();
+        
+        if (customerDebts.isNotEmpty) {
+          // زیادکردنی بۆ کۆنترین قەرزی ماوە
+          final oldestDebt = customerDebts.reduce((a, b) => 
+              DateTime.parse(a['date'] as String).isBefore(DateTime.parse(b['date'] as String)) ? a : b);
+          
+          final newAmount = (oldestDebt['amount'] as double) + totalAmount;
+          final newPaid = oldestDebt['paid'] as double;
+          final newRemaining = newAmount - newPaid;
+          
+          await _dbHelper.updateDebt(oldestDebt['id'] as int, {
+            ...oldestDebt,
+            'amount': newAmount,
+            'remaining': newRemaining,
+            'description': '${oldestDebt['description'] ?? ''} | فرۆشتنی زیاتر: $bulkSaleId',
+          });
+        }
+      } else {
+        // ئەگەر قەرزی پێشوو نییە، دروستی بکە
         final debt = {
           'customer_name': customerName,
           'amount': totalAmount,
@@ -396,69 +467,78 @@ final salePrice = isWholesale && item['wholesale_price'] != null
         };
         await _dbHelper.insertDebt(debt);
       }
+    }
 
-      setState(() => _cart.clear());
-      await _loadData();
+    setState(() => _cart.clear());
+    await _loadData();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(isCash
-                ? '✅ فرۆشتنی جوملە بە سەرکەوتوویی تۆمارکرا'
+    if (mounted) {
+      final existingDebtAmount = await _getCustomerRemainingDebt(customerName);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isCash
+              ? '✅ فرۆشتنی جوملە بە سەرکەوتوویی تۆمارکرا'
+              : existingDebtAmount > 0 
+                ? '📋 فرۆشتنی جوملە زیادکرا بۆ قەرزی پێشووی $customerName'
                 : '📋 فرۆشتنی جوملە وەک قەرز بە $customerName تۆمارکرا'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('هەڵە: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('هەڵە: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
+}
 
 void _showCartDialog() {
-    if (_cart.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('سەبەتە بەتاڵە! کاڵایەک زیاد بکە')),
-      );
-      return;
-    }
+  if (_cart.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('سەبەتە بەتاڵە! کاڵایەک زیاد بکە')),
+    );
+    return;
+  }
 
-    bool isCash = true;
-    final customerNameController = TextEditingController();
+  bool isCash = true;
+  final customerNameController = TextEditingController();
+  bool isNewCustomer = false; // 🆕 بۆ جیاکردنەوەی کڕیاری نوێ
+  String? selectedCustomer; // 🆕 بۆ هەڵبژاردنی کڕیار
+  List<Map<String, dynamic>> debtors = []; // 🆕 لیستی قەرزداران
 
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          title: Row(
-            children: [
-              const Icon(Icons.shopping_cart, color: Colors.orange),
-              const SizedBox(width: 8),
-              const Text('سەبەتەی فرۆشتن'),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                onPressed: () {
-                  setState(() => _cart.clear());
-                  Navigator.pop(dialogContext);
-                },
-                tooltip: 'بەتاڵکردنەوەی سەبەتە',
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
+  showDialog(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.shopping_cart, color: Colors.orange),
+            const SizedBox(width: 8),
+            const Text('سەبەتەی فرۆشتن'),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              onPressed: () {
+                setState(() => _cart.clear());
+                Navigator.pop(dialogContext);
+              },
+              tooltip: 'بەتاڵکردنەوەی سەبەتە',
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView( // 🆕 زیادکرا بۆ scroll
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // ئاگادارکردنەوە بۆ فرۆشتنی جومڵە
                 if (_cart.length > 1)
                   Container(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -479,7 +559,7 @@ void _showCartDialog() {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'فرۆشتنی جوملە',
+                                'فرۆشتنی جومڵە',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: Colors.blue.shade700,
@@ -500,16 +580,18 @@ void _showCartDialog() {
                     ),
                   ),
                 
-                Flexible(
+                // لیستی کاڵاکان لە سەبەتە
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200),
                   child: ListView.builder(
                     shrinkWrap: true,
                     itemCount: _cart.length,
                     itemBuilder: (context, index) {
                       final item = _cart[index];
-                      final isWholesale = item['is_wholesale'] ?? false; // 🆕
+                      final isWholesale = item['is_wholesale'] ?? false;
                       final currentPrice = isWholesale && item['wholesale_price'] != null
                           ? item['wholesale_price']
-                          : item['sell_price']; // 🆕
+                          : item['sell_price'];
                       final itemTotal = currentPrice * item['cart_quantity'];
                       
                       return Card(
@@ -543,7 +625,6 @@ void _showCartDialog() {
                                           ],
                                         ),
                                       ),
-                                      // 🆕 دووگمەی جوملە
                                       if (item['wholesale_price'] != null)
                                         PopupMenuItem(
                                           value: 'toggle_wholesale',
@@ -555,7 +636,7 @@ void _showCartDialog() {
                                                 color: Colors.blue,
                                               ),
                                               const SizedBox(width: 8),
-                                              Text(isWholesale ? 'گۆڕین بۆ تاک' : 'گۆڕین بۆ جوملە'),
+                                              Text(isWholesale ? 'گۆڕین بە تاک' : 'گۆڕین بە جومڵە'),
                                             ],
                                           ),
                                         ),
@@ -574,12 +655,11 @@ void _showCartDialog() {
                                       if (value == 'edit_price') {
                                         _showEditPriceDialog(index);
                                       } else if (value == 'toggle_wholesale') {
-  // 🆕 گۆڕینی نێوان تاک و جوملە
-  setState(() {
-    _cart[index]['is_wholesale'] = !isWholesale;
-  });
-  setDialogState(() {}); // 🆕 زیادکراوە - نوێکردنەوەی دیالۆگ
-} else if (value == 'remove') {
+                                        setState(() {
+                                          _cart[index]['is_wholesale'] = !isWholesale;
+                                        });
+                                        setDialogState(() {});
+                                      } else if (value == 'remove') {
                                         setState(() => _removeFromCart(index));
                                         setDialogState(() {});
                                       }
@@ -587,7 +667,6 @@ void _showCartDialog() {
                                   ),
                                 ],
                               ),
-                              // 🆕 نیشاندانی جۆری فرۆشتن
                               if (isWholesale && item['wholesale_price'] != null)
                                 Container(
                                   margin: const EdgeInsets.only(top: 4),
@@ -602,7 +681,7 @@ void _showCartDialog() {
                                       Icon(Icons.inventory_2, size: 12, color: Colors.blue.shade700),
                                       const SizedBox(width: 4),
                                       Text(
-                                        'فرۆشتنی جوملە',
+                                        'فرۆشتنی جومڵە',
                                         style: TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold,
@@ -692,7 +771,10 @@ void _showCartDialog() {
                     },
                   ),
                 ),
+                
                 const Divider(height: 24, thickness: 2),
+                
+                // کۆی گشتی
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -723,7 +805,7 @@ void _showCartDialog() {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                    /*  const SizedBox(height: 8),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -737,11 +819,14 @@ void _showCartDialog() {
                             ),
                           ),
                         ],
-                      ),
+                      ), */
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
+                
+                const SizedBox(height: 6),
+                
+                // جۆری وەرگرتنی پارە
                 SwitchListTile(
                   title: const Text('جۆری وەرگرتنی پارە'),
                   subtitle: Text(
@@ -754,63 +839,252 @@ void _showCartDialog() {
                   ),
                   value: isCash,
                   activeThumbColor: Colors.green,
-                  onChanged: (value) => setDialogState(() => isCash = value),
+                  onChanged: (value) async {
+                    isCash = value;
+                    if (!isCash) {
+                      // 🆕 وەرگرتنی لیستی قەرزداران کاتێک قەرز دەکرێت
+                      debtors = await _getUniqueDebtors();
+                    }
+                    setDialogState(() {});
+                  },
                 ),
+                
+                // 🆕 بەشی هەڵبژاردنی قەرزدار
                 if (!isCash) ...[
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: customerNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'ناوی کڕیار (قەرز)',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.person),
-                      hintText: 'ناوی کەسی قەرزەکە بنوووسە',
+                  
+                  // دوگمەی گۆڕین نێوان قەرزداری پێشوو و نوێ
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Column(
+                      children: [
+                        // تاب بەتن بۆ گۆڕین
+                        Row(
+                          children: [
+                            Expanded(
+                              child: InkWell(
+                                onTap: () => setDialogState(() => isNewCustomer = false),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: !isNewCustomer 
+                                        ? Colors.orange.shade600 
+                                        : Colors.transparent,
+                                    borderRadius: const BorderRadius.only(
+                                      topLeft: Radius.circular(8),
+                                      bottomLeft: Radius.circular(8),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.history,
+                                        color: !isNewCustomer ? Colors.white : Colors.orange.shade700,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'قەرزداری پێشوو',
+                                        style: TextStyle(
+                                          color: !isNewCustomer ? Colors.white : Colors.orange.shade700,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: InkWell(
+                                onTap: () => setDialogState(() => isNewCustomer = true),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: isNewCustomer 
+                                        ? Colors.orange.shade600 
+                                        : Colors.transparent,
+                                    borderRadius: const BorderRadius.only(
+                                      topRight: Radius.circular(8),
+                                      bottomRight: Radius.circular(8),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.person_add,
+                                        color: isNewCustomer ? Colors.white : Colors.orange.shade700,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'قەرزداری نوێ',
+                                        style: TextStyle(
+                                          color: isNewCustomer ? Colors.white : Colors.orange.shade700,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // 🆕 بەشی ناوەڕۆک بەپێی هەڵبژاردن
+                  if (isNewCustomer)
+                    // تێکست فیڵد بۆ قەرزداری نوێ
+                    TextField(
+                      controller: customerNameController,
+                      decoration: InputDecoration(
+                        labelText: 'ناوی قەرزداری نوێ',
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.person_add),
+                        hintText: 'ناوی کەسی قەرزەکە بنووسە',
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                    )
+                  else
+                    // لیستی قەرزدارە پێشووەکان
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: debtors.isEmpty
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Text(
+                                  'هیچ قەرزدارێک نییە\nتکایە "قەرزداری نوێ" هەڵبژێرە',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: debtors.length,
+                              itemBuilder: (context, index) {
+                                final debtor = debtors[index];
+                                final isSelected = selectedCustomer == debtor['customer_name'];
+                                
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    color: isSelected 
+                                        ? Colors.orange.shade100 
+                                        : Colors.white,
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: Colors.grey.shade200,
+                                        width: 1,
+                                      ),
+                                    ),
+                                  ),
+                                  child: ListTile(
+                                    onTap: () {
+                                      selectedCustomer = debtor['customer_name'];
+                                      customerNameController.text = selectedCustomer!;
+                                      setDialogState(() {});
+                                    },
+                                    selected: isSelected,
+                                    leading: CircleAvatar(
+                                      backgroundColor: isSelected 
+                                          ? Colors.orange.shade600 
+                                          : Colors.red.shade100,
+                                      child: Icon(
+                                        isSelected ? Icons.check : Icons.person,
+                                        color: isSelected ? Colors.white : Colors.red.shade700,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    title: Text(
+                                      debtor['customer_name'],
+                                      style: TextStyle(
+                                        fontWeight: isSelected 
+                                            ? FontWeight.bold 
+                                            : FontWeight.normal,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      'ماوە: ${_formatNumber(debtor['total_remaining'])} IQD • '
+                                      '${debtor['debt_count']} قەرز',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                    trailing: Icon(
+                                      isSelected 
+                                          ? Icons.check_circle 
+                                          : Icons.radio_button_unchecked,
+                                      color: isSelected 
+                                          ? Colors.orange.shade600 
+                                          : Colors.grey,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
                 ],
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('پاشگەزبوونەوە'),
-            ),
-            ElevatedButton.icon(
-              onPressed: () async {
-                if (!isCash && customerNameController.text.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('تکایە ناوی کڕیاری قەرز بنوووسە'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-
-                Navigator.pop(dialogContext);
-                
-                await _completeBulkSale(
-                  isCash: isCash,
-                  customerName: customerNameController.text,
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
-              icon: Icon(_cart.length > 1 ? Icons.inventory : Icons.sell,color: Colors.white,),
-              label: Text(
-                _cart.length > 1 ? 'فرۆشتنی جوملە' : 'تەواوکردنی فرۆشتن',
-                
-                style: const TextStyle(color: Colors.white,fontSize: 16),
-              ),
-            ),
-          ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('پاشگەزبوونەوە'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              if (!isCash && customerNameController.text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('تکایە ناوی کڕیاری قەرز بنووسە یان هەڵبژێرە'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              Navigator.pop(dialogContext);
+              
+              await _completeBulkSale(
+                isCash: isCash,
+                customerName: customerNameController.text,
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            icon: Icon(
+              _cart.length > 1 ? Icons.inventory : Icons.sell,
+              color: Colors.white,
+            ),
+            label: Text(
+              _cart.length > 1 ? 'فرۆشتنی جومڵە' : 'تەواوکردنی فرۆشتن',
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+            ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
 @override
 Widget build(BuildContext context) {
@@ -1039,7 +1313,7 @@ Widget build(BuildContext context) {
                                             ),
                                           ),
                                           const SizedBox(width: 6),
-                                          Container(
+                                      /*    Container(
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 8,
                                               vertical: 2,
@@ -1056,7 +1330,7 @@ Widget build(BuildContext context) {
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),
-                                          ),
+                                          ), */
                                         ],
                                       ),
                                       const SizedBox(height: 4),

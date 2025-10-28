@@ -574,22 +574,21 @@ void _showDeveloperDialog() {
                   return;
                 }
               }
+String cleanBuyPrice = buyPriceController.text.replaceAll(',', '');
+String cleanSellPrice = sellPriceController.text.replaceAll(',', '');
+String? cleanWholesalePrice = wholesalePriceController.text.isNotEmpty 
+    ? wholesalePriceController.text.replaceAll(',', '') 
+    : null;
 
-              String cleanBuyPrice = buyPriceController.text.replaceAll(',', '');
-              String cleanSellPrice = sellPriceController.text.replaceAll(',', '');
-              String? cleanWholesalePrice = wholesalePriceController.text.isNotEmpty 
-                  ? wholesalePriceController.text.replaceAll(',', '') 
-                  : null;
-
-              final product = {
-                'name': nameController.text,
-                'barcode': barcodeController.text.isEmpty ? null : barcodeController.text,
-                'buy_price': double.parse(cleanBuyPrice),
-                'sell_price': double.parse(cleanSellPrice),
-                'wholesale_price': cleanWholesalePrice != null ? double.parse(cleanWholesalePrice) : null,
-                'quantity': int.parse(quantityController.text),
-                'created_at': DateTime.now().toIso8601String(),
-              };
+final product = {
+  'name': nameController.text,
+  'barcode': barcodeController.text.isEmpty ? null : barcodeController.text,
+  'buy_price': double.parse(cleanBuyPrice),
+  'sell_price': double.parse(cleanSellPrice),
+  'wholesale_price': cleanWholesalePrice != null ? double.parse(cleanWholesalePrice) : null,
+  'quantity': int.parse(quantityController.text),
+  'created_at': DateTime.now().toIso8601String(),
+};
 
               final id = await _dbHelper.insertProduct(product);
               product['id'] = id;

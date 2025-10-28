@@ -18,7 +18,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _isLoading = true;
   bool _groupBulkSales = true;
-  bool _showOnlyBulkSales = false; // 🆕 پیشاندانی تەنها فرۆشتنی جوملە
+  final bool _showOnlyBulkSales = false; // 🆕 پیشاندانی تەنها فرۆشتنی جوملە
 
   String _selectedFilter = 'هەموو';
   final List<String> _filterOptions = [
