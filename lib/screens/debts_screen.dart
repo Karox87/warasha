@@ -373,7 +373,7 @@ Widget _buildEnhancedReceiptContent(
               ),
               const SizedBox(height: 12),
               const Text(
-                'سیستەمی بەڕێوەبردنی فرۆشگا',
+                'وەرشەی وەستا پشتیوان',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -931,7 +931,7 @@ Widget _buildEnhancedReceiptContent(
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'سیستەمی بەڕێوەبردنی فرۆشگا',
+                  'وەرشەی وەستا پشتیوان',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -1493,7 +1493,7 @@ List<Widget> _buildFullEnhancedReceiptContent(
           ),
           const SizedBox(height: 12),
           const Text(
-            'سیستەمی بەڕێوەبردنی فرۆشگا',
+            'وەرشەی وەستا پشتیوان',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -1982,7 +1982,7 @@ List<Widget> _buildFullReceiptContent(Map<String, dynamic> debt, List<Map<String
           ),
           const SizedBox(height: 12),
           const Text(
-            'سیستەمی بەڕێوەبردنی فرۆشگا',
+            'وەرشەی وەستا پشتیوان',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,

@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import 'package:flutter/services.dart'; // 🆕 ئەمە زیاد بکە
-
+import 'dart:ui' as ui;
+import 'package:share_plus/share_plus.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/rendering.dart';
 class SalesHistoryScreen extends StatefulWidget {
   const SalesHistoryScreen({super.key});
 
@@ -19,6 +23,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   bool _isLoading = true;
   bool _groupBulkSales = true;
   final bool _showOnlyBulkSales = false; // 🆕 پیشاندانی تەنها فرۆشتنی جوملە
+  final GlobalKey _receiptKey = GlobalKey();
 
   String _selectedFilter = 'هەموو';
   final List<String> _filterOptions = [
@@ -215,6 +220,1044 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     }
   }
 
+  Widget _buildReceiptContent(Map<String, dynamic> sale) {
+  final date = DateTime.parse(sale['date']);
+  final formattedDate = DateFormat('yyyy-MM-dd | hh:mm a').format(date);
+  final profit = ((sale['price'] as num).toDouble() - 
+                ((sale['buy_price'] as num?)?.toDouble() ?? 0)) * 
+                (sale['quantity'] as num).toInt();
+  
+  return Padding(
+    padding: const EdgeInsets.all(20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // سەرپەڕە
+        Center(
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.store,
+                  size: 48,
+                  color: Colors.orange.shade700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'وەرشەی وەستا پشتیوان',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'وەسڵی فرۆشتن',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        const Divider(height: 32, thickness: 2),
+        
+        // زانیاری فرۆشتن
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.receipt, size: 20, color: Colors.orange.shade700),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'زانیاری وەسڵ',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 16),
+              _buildInfoRow('بەروار:', formattedDate),
+              _buildInfoRow('کۆدی وەسڵ:', '#${sale['id']}'),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 20),
+        
+        // وردەکاری کاڵا
+        Row(
+          children: [
+            Icon(Icons.shopping_bag, size: 20, color: Colors.orange.shade700),
+            const SizedBox(width: 8),
+            const Text(
+              'وردەکاری کاڵا',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.orange.shade200),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                sale['product_name'],
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Divider(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('بڕ:', style: TextStyle(fontSize: 14)),
+                  Text(
+                    '${sale['quantity']} دانە',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('نرخی یەک دانە:', style: TextStyle(fontSize: 14)),
+                  Text(
+                    '${_formatNumber(sale['price'])} IQD',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 20),
+        
+        // کۆی گشتی
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.orange.shade50, Colors.orange.shade100],
+            ),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.orange.shade300, width: 2),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'کۆی گشتی:',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '${_formatNumber(sale['total'])} IQD',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange.shade700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 24),
+        
+        // تێبینی
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue.shade200),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, size: 18, color: Colors.blue.shade700),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'سوپاس بۆ کڕینەکەت! هیوادارین دووبارە بگەڕێیتەوە',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 16),
+        
+        // پێی وەسڵ
+        const Divider(thickness: 1),
+        Center(
+          child: Column(
+            children: [
+              const Text(
+                'سوپاس بۆ باوەڕت بە ئێمە',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.code, size: 16, color: Colors.blue.shade700),
+                        const SizedBox(width: 6),
+                        Text(
+                          'گەشەپێدەر: کاروخ غەففور',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.phone, size: 14, color: Colors.green.shade700),
+                        const SizedBox(width: 4),
+                        Text(
+                          '0750 232 16 37',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade700,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'بۆ دروستکردنی سیستەمی مۆبایل',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'چاپکراوە: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildSingleSaleReceiptContent(Map<String, dynamic> sale) {
+  final date = DateTime.parse(sale['date']);
+  final formattedDate = DateFormat('yyyy-MM-dd | hh:mm a').format(date);
+  
+  return Padding(
+    padding: const EdgeInsets.all(20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // سەرپەڕە
+        Center(
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.store,
+                  size: 48,
+                  color: Colors.orange.shade700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'وەرشەی وەستا پشتیوان',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'وەسڵی فرۆشتن',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        const Divider(height: 32, thickness: 2),
+        
+        // زانیاری وەسڵ
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.receipt, size: 20, color: Colors.orange.shade700),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'زانیاری وەسڵ',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 16),
+              _buildInfoRow('بەروار:', formattedDate),
+              _buildInfoRow('کۆدی وەسڵ:', '#${sale['id']}'),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 20),
+        
+        // وردەکاری کاڵا
+        Row(
+          children: [
+            Icon(Icons.shopping_bag, size: 20, color: Colors.orange.shade700),
+            const SizedBox(width: 8),
+            const Text(
+              'وردەکاری کاڵا',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.orange.shade200),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                sale['product_name'],
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Divider(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('بڕ:', style: TextStyle(fontSize: 14)),
+                  Text(
+                    '${sale['quantity']} دانە',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('نرخی یەک دانە:', style: TextStyle(fontSize: 14)),
+                  Text(
+                    '${_formatNumber(sale['price'])} IQD',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 20),
+        
+        // کۆی گشتی (بێ قازانج)
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.orange.shade50, Colors.orange.shade100],
+            ),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.orange.shade300, width: 2),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'کۆی گشتی:',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '${_formatNumber(sale['total'])} IQD',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange.shade700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 24),
+        
+        // تێبینی
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue.shade200),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, size: 18, color: Colors.blue.shade700),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'سوپاس بۆ کڕینەکەت! هیوادارین دووبارە بگەڕێیتەوە',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 16),
+        
+        // پێی وەسڵ
+        const Divider(thickness: 1),
+        Center(
+          child: Column(
+            children: [
+              const Text(
+                'سوپاس بۆ باوەڕت بە ئێمە',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.code, size: 16, color: Colors.blue.shade700),
+                        const SizedBox(width: 6),
+                        Text(
+                          'گەشەپێدەر: کاروخ غەففور',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.phone, size: 14, color: Colors.green.shade700),
+                        const SizedBox(width: 4),
+                        Text(
+                          '0750 232 16 37',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade700,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'بۆ دروستکردنی سیستەمی مۆبایل',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'چاپکراوە: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+
+Widget _buildBulkSaleReceiptContent(String bulkSaleId, List<Map<String, dynamic>> sales) {
+  final totalAmount = sales.fold(0.0, (sum, sale) => sum + (sale['total'] as num).toDouble());
+  final totalProfit = sales.fold(0.0, (sum, sale) {
+    final sellPrice = (sale['price'] as num).toDouble();
+    final buyPrice = (sale['buy_price'] as num?)?.toDouble() ?? 0;
+    final quantity = (sale['quantity'] as num).toInt();
+    return sum + ((sellPrice - buyPrice) * quantity);
+  });
+  final date = DateTime.parse(sales[0]['date']);
+  final formattedDate = DateFormat('yyyy-MM-dd | hh:mm a').format(date);
+  
+  return Padding(
+    padding: const EdgeInsets.all(20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // سەرپەڕە
+        Center(
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.inventory,
+                  size: 48,
+                  color: Colors.blue.shade700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'وەرشەی وەستا پشتیوان',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'وەسڵی فرۆشتنی جوملە',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        const Divider(height: 32, thickness: 2),
+        
+        // زانیاری وەسڵ
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.receipt, size: 20, color: Colors.blue.shade700),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'زانیاری وەسڵ',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 16),
+              _buildInfoRow('بەروار:', formattedDate),
+              _buildInfoRow('ژمارەی کاڵا:', '${sales.length} جۆر'),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 20),
+        
+        // کۆدی فرۆشتنی جوملە
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Colors.blue.shade200),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.qr_code, size: 16, color: Colors.blue.shade700),
+              const SizedBox(width: 6),
+              Text(
+                'کۆدی جوملە: ${bulkSaleId.split('_').last.substring(0, 8)}...',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade700,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 20),
+        
+        // کۆی گشتی فرۆشتنەکان
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue.shade200),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'کۆی گشتی فرۆشتنەکان',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                  Text(
+                    '${sales.length} جۆر کاڵا',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.blue.shade600,
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    _formatNumber(totalAmount),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                  const Text(
+                    'IQD',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 20),
+        
+        // لیستی کاڵاکان
+        Row(
+          children: [
+            Icon(Icons.shopping_cart, size: 20, color: Colors.blue.shade700),
+            const SizedBox(width: 8),
+            const Text(
+              'هەموو کاڵاکان',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            children: [
+              // سەرپەڕە
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(8),
+                    topRight: Radius.circular(8),
+                  ),
+                ),
+                child: const Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        'ناوی کاڵا',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        'بڕ',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        'نرخ',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        'کۆ',
+                        textAlign: TextAlign.end,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // کاڵاکان
+              ...sales.asMap().entries.map((entry) {
+                final index = entry.key;
+                final sale = entry.value;
+                final isLast = index == sales.length - 1;
+                
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: index.isEven ? Colors.white : Colors.grey.shade50,
+                    border: !isLast ? Border(
+                      bottom: BorderSide(color: Colors.grey.shade200),
+                    ) : null,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          sale['product_name'] ?? 'کاڵا',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          '${sale['quantity']}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          _formatNumber(sale['price']),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          _formatNumber(sale['total']),
+                          textAlign: TextAlign.end,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 20),
+        
+        // کۆی گشتی
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.blue.shade50, Colors.blue.shade100],
+            ),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue.shade300, width: 2),
+          ),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'کۆی گشتی:',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    '${_formatNumber(totalAmount)} IQD',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                ],
+              ),
+              
+             
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 24),
+        
+        // تێبینی
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue.shade200),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, size: 18, color: Colors.blue.shade700),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'سوپاس بۆ کڕینی جوملە! هەموو کاڵاکان لەم وەسڵەدا پیشاندراون',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 16),
+        
+        // پێی وەسڵ
+        const Divider(thickness: 1),
+        Center(
+          child: Column(
+            children: [
+              const Text(
+                'سوپاس بۆ باوەڕت بە ئێمە',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.code, size: 16, color: Colors.blue.shade700),
+                        const SizedBox(width: 6),
+                        Text(
+                          'گەشەپێدەر: کاروخ غەففور',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.phone, size: 14, color: Colors.green.shade700),
+                        const SizedBox(width: 4),
+                        Text(
+                          '0750 232 16 37',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade700,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'بۆ دروستکردنی سیستەمی مۆبایل',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'چاپکراوە: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
   void _showBulkSaleDetails(String bulkSaleId, List<Map<String, dynamic>> sales) {
     final totalAmount = sales.fold(0.0, (sum, sale) => sum + (sale['total'] as num).toDouble());
     final totalProfit = sales.fold(0.0, (sum, sale) {
@@ -238,9 +1281,21 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
               ),
             ),
             // 🆕 دوگمەی مۆر
+            
+            
             PopupMenuButton<String>(
               icon: Icon(Icons.more_vert, color: Colors.grey.shade700),
               itemBuilder: (context) => [
+                PopupMenuItem(
+  value: 'receipt',
+  child: Row(
+    children: [
+      Icon(Icons.receipt_long, size: 18, color: Colors.blue),
+      SizedBox(width: 6),
+      Text('وەسڵی جوملە'),
+    ],
+  ),
+),
                 const PopupMenuItem(
                   value: 'delete',
                   child: Row(
@@ -257,6 +1312,10 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                   Navigator.pop(context);
                   _showDeleteBulkSaleDialog(bulkSaleId, sales);
                 }
+                if (value == 'receipt') {
+  Navigator.pop(context);
+  _showBulkSaleReceipt(bulkSaleId, sales);
+}
               },
             ),
           ],
@@ -693,25 +1752,248 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   }
 
   // هێلپەر بۆ پیشاندانی زانیاری
-  Widget _buildInfoRow(String label, String value, {bool isHighlight = false}) {
-    return Row(
+ Widget _buildInfoRow(String label, String value, {bool isHighlight = false}) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 13),
+          style: TextStyle(
+            fontSize: isHighlight ? 14 : 13,
+            color: Colors.grey.shade700,
+          ),
         ),
         Text(
           value,
           style: TextStyle(
             fontSize: isHighlight ? 15 : 13,
             fontWeight: FontWeight.bold,
-            color: isHighlight ? Colors.red.shade700 : Colors.black87,
+            color: isHighlight ? Colors.orange.shade700 : Colors.black87,
           ),
         ),
       ],
+    ),
+  );
+}
+Future<void> _showSaleReceipt(Map<String, dynamic> sale) async {
+  showDialog(
+    context: context,
+    builder: (context) => Dialog(
+      child: Container(
+        width: 400,
+        constraints: const BoxConstraints(maxHeight: 700),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // سەرپەڕە
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade700,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  topRight: Radius.circular(12),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'وەسڵی فرۆشتن',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'share',
+                            child: Row(
+                              children: [
+                                Icon(Icons.share, size: 16, color: Colors.blue),
+                                SizedBox(width: 6),
+                                Text('هاوبەشکردن'),
+                              ],
+                            ),
+                          ),
+                        ],
+                        onSelected: (value) {
+                          if (value == 'share') {
+                            _shareReceipt(sale);
+                          }
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            // ناوەڕۆک
+            Flexible(
+              child: RepaintBoundary(
+                key: _receiptKey,
+                child: Container(
+                  color: Colors.white,
+                  child: SingleChildScrollView(
+                    child: _buildReceiptContent(sale),
+                  ),
+                ),
+              ),
+            ),
+            
+            // خوارەوە
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(12),
+                  bottomRight: Radius.circular(12),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _shareReceipt(sale),
+                      icon: const Icon(Icons.share, color: Colors.white, size: 18),
+                      label: const Text('هاوبەشکردن', style: TextStyle(color: Colors.white, fontSize: 14)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Future<void> _shareReceipt(Map<String, dynamic> sale) async {
+  try {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('ئامادەکردنی وەسڵ...'),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
+
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    final GlobalKey captureKey = GlobalKey();
+    
+    final captureWidget = RepaintBoundary(
+      key: captureKey,
+      child: Material(
+        color: Colors.white,
+        child: Container(
+          width: 400,
+          color: Colors.white,
+          padding: const EdgeInsets.all(20),
+          child: _buildReceiptContent(sale),
+        ),
+      ),
+    );
+
+    final overlay = OverlayEntry(
+      builder: (context) => Positioned(
+        left: -10000,
+        top: 0,
+        child: captureWidget,
+      ),
+    );
+
+    Overlay.of(context).insert(overlay);
+    await Future.delayed(const Duration(milliseconds: 800));
+
+    final boundary = captureKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    if (boundary == null) {
+      overlay.remove();
+      Navigator.pop(context);
+      throw Exception('هەڵە لە دروستکردنی وێنە');
+    }
+
+    final image = await boundary.toImage(pixelRatio: 3.0);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final pngBytes = byteData!.buffer.asUint8List();
+
+    overlay.remove();
+
+    final directory = await getTemporaryDirectory();
+    final imagePath = '${directory.path}/sale_receipt_${sale['id']}_${DateTime.now().millisecondsSinceEpoch}.png';
+    final imageFile = File(imagePath);
+    await imageFile.writeAsBytes(pngBytes);
+
+    Navigator.pop(context);
+
+    await Share.shareXFiles(
+      [XFile(imagePath)],
+      text: 'وەسڵی فرۆشتن - ${sale['product_name']}\nکۆ: ${_formatNumber(sale['total'])} IQD',
+    );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 8),
+              Text('وەسڵەکە بە سەرکەوتوویی هاوبەش کرا'),
+            ],
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  } catch (e) {
+    if (mounted && Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('هەڵە: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
+}
+
 
 // 🔧 فەنکشنی دەستکاری فرۆشتن لە مێژوو
 // لە sales_history_screen.dart بدۆزەرەوە و بیگۆڕە:
@@ -1091,6 +2373,442 @@ void _showEditSaleDialog(Map<String, dynamic> sale) {
       ),
     );
   }
+
+  Future<void> _showSingleSaleReceipt(Map<String, dynamic> sale) async {
+  showDialog(
+    context: context,
+    builder: (context) => Dialog(
+      child: Container(
+        width: 400,
+        constraints: const BoxConstraints(maxHeight: 700),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // سەرپەڕە
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade700,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  topRight: Radius.circular(12),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'وەسڵی فرۆشتن',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'share',
+                            child: Row(
+                              children: [
+                                Icon(Icons.share, size: 16, color: Colors.blue),
+                                SizedBox(width: 6),
+                                Text('هاوبەشکردن'),
+                              ],
+                            ),
+                          ),
+                        ],
+                        onSelected: (value) {
+                          if (value == 'share') {
+                            _shareSingleReceipt(sale);
+                          }
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            // ناوەڕۆک
+            Flexible(
+              child: RepaintBoundary(
+                key: _receiptKey,
+                child: Container(
+                  color: Colors.white,
+                  child: SingleChildScrollView(
+                    child: _buildSingleSaleReceiptContent(sale),
+                  ),
+                ),
+              ),
+            ),
+            
+            // خوارەوە
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(12),
+                  bottomRight: Radius.circular(12),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _shareSingleReceipt(sale),
+                      icon: const Icon(Icons.share, color: Colors.white, size: 18),
+                      label: const Text('هاوبەشکردن', style: TextStyle(color: Colors.white, fontSize: 14)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Future<void> _shareSingleReceipt(Map<String, dynamic> sale) async {
+  try {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('ئامادەکردنی وەسڵ...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    final GlobalKey captureKey = GlobalKey();
+    
+    final captureWidget = RepaintBoundary(
+      key: captureKey,
+      child: Material(
+        color: Colors.white,
+        child: Container(
+          width: 400,
+          color: Colors.white,
+          padding: const EdgeInsets.all(20),
+          child: _buildSingleSaleReceiptContent(sale),
+        ),
+      ),
+    );
+
+    final overlay = OverlayEntry(
+      builder: (context) => Positioned(
+        left: -10000,
+        top: 0,
+        child: captureWidget,
+      ),
+    );
+
+    Overlay.of(context).insert(overlay);
+    await Future.delayed(const Duration(milliseconds: 800));
+
+    final boundary = captureKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    if (boundary == null) {
+      overlay.remove();
+      Navigator.pop(context);
+      throw Exception('هەڵە لە دروستکردنی وێنە');
+    }
+
+    final image = await boundary.toImage(pixelRatio: 3.0);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final pngBytes = byteData!.buffer.asUint8List();
+
+    overlay.remove();
+
+    final directory = await getTemporaryDirectory();
+    final imagePath = '${directory.path}/sale_receipt_${sale['id']}_${DateTime.now().millisecondsSinceEpoch}.png';
+    final imageFile = File(imagePath);
+    await imageFile.writeAsBytes(pngBytes);
+
+    Navigator.pop(context);
+
+    await Share.shareXFiles(
+      [XFile(imagePath)],
+      text: 'وەسڵی فرۆشتن - ${sale['product_name']}\nکۆ: ${_formatNumber(sale['total'])} IQD',
+    );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 8),
+              Text('وەسڵەکە بە سەرکەوتوویی هاوبەش کرا'),
+            ],
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  } catch (e) {
+    if (mounted && Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('هەڵە: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+}
+
+
+Future<void> _showBulkSaleReceipt(String bulkSaleId, List<Map<String, dynamic>> sales) async {
+  showDialog(
+    context: context,
+    builder: (context) => Dialog(
+      child: Container(
+        width: 400,
+        constraints: const BoxConstraints(maxHeight: 700),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // سەرپەڕە
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade700,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  topRight: Radius.circular(12),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'وەسڵی فرۆشتنی جوملە',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'share',
+                            child: Row(
+                              children: [
+                                Icon(Icons.share, size: 16, color: Colors.blue),
+                                SizedBox(width: 6),
+                                Text('هاوبەشکردن'),
+                              ],
+                            ),
+                          ),
+                        ],
+                        onSelected: (value) {
+                          if (value == 'share') {
+                            _shareBulkReceipt(bulkSaleId, sales);
+                          }
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            // ناوەڕۆک
+            Flexible(
+              child: RepaintBoundary(
+                key: _receiptKey,
+                child: Container(
+                  color: Colors.white,
+                  child: SingleChildScrollView(
+                    child: _buildBulkSaleReceiptContent(bulkSaleId, sales),
+                  ),
+                ),
+              ),
+            ),
+            
+            // خوارەوە
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(12),
+                  bottomRight: Radius.circular(12),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _shareBulkReceipt(bulkSaleId, sales),
+                      icon: const Icon(Icons.share, color: Colors.white, size: 18),
+                      label: const Text('هاوبەشکردن', style: TextStyle(color: Colors.white, fontSize: 14)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Future<void> _shareBulkReceipt(String bulkSaleId, List<Map<String, dynamic>> sales) async {
+  try {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('ئامادەکردنی وەسڵی جوملە...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    final GlobalKey captureKey = GlobalKey();
+    
+    final captureWidget = RepaintBoundary(
+      key: captureKey,
+      child: Material(
+        color: Colors.white,
+        child: Container(
+          width: 400,
+          color: Colors.white,
+          padding: const EdgeInsets.all(20),
+          child: _buildBulkSaleReceiptContent(bulkSaleId, sales),
+        ),
+      ),
+    );
+
+    final overlay = OverlayEntry(
+      builder: (context) => Positioned(
+        left: -10000,
+        top: 0,
+        child: captureWidget,
+      ),
+    );
+
+    Overlay.of(context).insert(overlay);
+    await Future.delayed(const Duration(milliseconds: 800));
+
+    final boundary = captureKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    if (boundary == null) {
+      overlay.remove();
+      Navigator.pop(context);
+      throw Exception('هەڵە لە دروستکردنی وێنە');
+    }
+
+    final image = await boundary.toImage(pixelRatio: 3.0);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    final pngBytes = byteData!.buffer.asUint8List();
+
+    overlay.remove();
+
+    final directory = await getTemporaryDirectory();
+    final imagePath = '${directory.path}/bulk_receipt_${bulkSaleId.split('_').last}_${DateTime.now().millisecondsSinceEpoch}.png';
+    final imageFile = File(imagePath);
+    await imageFile.writeAsBytes(pngBytes);
+
+    Navigator.pop(context);
+
+    final totalAmount = sales.fold(0.0, (sum, sale) => sum + (sale['total'] as num).toDouble());
+    await Share.shareXFiles(
+      [XFile(imagePath)],
+      text: 'وەسڵی فرۆشتنی جوملە\nژمارەی کاڵا: ${sales.length} جۆر\nکۆی گشتی: ${_formatNumber(totalAmount)} IQD',
+    );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 8),
+              Text('وەسڵی جوملە بە سەرکەوتوویی هاوبەش کرا'),
+            ],
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  } catch (e) {
+    if (mounted && Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('هەڵە: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -1524,190 +3242,207 @@ void _showEditSaleDialog(Map<String, dynamic> sale) {
     );
   }
 
-  Widget _buildSingleSaleCard(Map<String, dynamic> sale, int index) {
-    final date = DateTime.parse(sale['date']);
-    final formattedDate = DateFormat('yyyy-MM-dd HH:mm').format(date);
-    final productName = sale['product_name'] ?? 'کاڵای سڕاوە';
-    final profit = ((sale['price'] as num).toDouble() - 
-                  ((sale['buy_price'] as num?)?.toDouble() ?? 0)) * 
-                  (sale['quantity'] as num).toInt();
+Widget _buildSingleSaleCard(Map<String, dynamic> sale, int index) {
+  final date = DateTime.parse(sale['date']);
+  final formattedDate = DateFormat('yyyy-MM-dd HH:mm').format(date);
+  final productName = sale['product_name'] ?? 'کاڵای سڕاوە';
+  final profit = ((sale['price'] as num).toDouble() - 
+                ((sale['buy_price'] as num?)?.toDouble() ?? 0)) * 
+                (sale['quantity'] as num).toInt();
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 2,
-      child: IntrinsicHeight(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                backgroundColor: Colors.orange.shade100,
-                radius: 20,
-                child: Text(
-                  '${index + 1}',
-                  style: TextStyle(
-                    color: Colors.orange.shade700,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
+  return Card(
+    margin: const EdgeInsets.only(bottom: 8),
+    elevation: 2,
+    child: IntrinsicHeight(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              backgroundColor: Colors.orange.shade100,
+              radius: 20,
+              child: Text(
+                '${index + 1}',
+                style: TextStyle(
+                  color: Colors.orange.shade700,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
                 ),
               ),
-              const SizedBox(width: 12),
-              
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      productName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(width: 12),
+            
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    productName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
                     ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            'بڕ: ${sale['quantity']}',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.blue.shade700,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade50,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            'نرخ: ${_formatNumber(sale['price'])}',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.orange.shade700,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(4),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.trending_up, 
-                          size: 11, 
-                          color: Colors.green.shade600
-                        ),
-                        const SizedBox(width: 3),
-                        Text(
-                          'قازانج: ${_formatNumber(profit)} IQD',
+                        child: Text(
+                          'بڕ: ${sale['quantity']}',
                           style: TextStyle(
                             fontSize: 10,
-                            color: Colors.green.shade700,
+                            color: Colors.blue.shade700,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'نرخ: ${_formatNumber(sale['price'])}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.orange.shade700,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.trending_up, 
+                        size: 11, 
+                        color: Colors.green.shade600
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        'قازانج: ${_formatNumber(profit)} IQD',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.green.shade700,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    formattedDate,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey.shade600,
                     ),
-                    const SizedBox(height: 3),
+                  ),
+                ],
+              ),
+            ),
+            
+            Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
                     Text(
-                      formattedDate,
+                      _formatNumber(sale['total']),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange.shade700,
+                      ),
+                    ),
+                    const Text(
+                      'IQD',
                       style: TextStyle(
                         fontSize: 10,
-                        color: Colors.grey.shade600,
+                        color: Colors.grey,
                       ),
                     ),
                   ],
                 ),
-              ),
-              
-              Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        _formatNumber(sale['total']),
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.orange.shade700,
-                        ),
-                      ),
-                      const Text(
-                        'IQD',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
+                PopupMenuButton<String>(  // ✅ زیادکراوە <String>
+                  padding: EdgeInsets.zero,
+                  icon: Icon(Icons.more_vert, 
+                    size: 18,
+                    color: Colors.grey.shade600,
                   ),
-                  PopupMenuButton(
-                    padding: EdgeInsets.zero,
-                    icon: Icon(Icons.more_vert, 
-                      size: 18,
-                      color: Colors.grey.shade600,
+                  // ✅ ئەمە بەشی نوێیە
+                  onSelected: (value) {
+                    if (value == 'receipt') {
+                      _showSingleSaleReceipt(sale);
+                    }
+                  },
+                  // ✅ کۆتایی بەشی نوێ
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      child: const Row(
+                        children: [
+                          Icon(Icons.edit, size: 18, color: Colors.blue),
+                          SizedBox(width: 8),
+                          Text('دەستکاری'),
+                        ],
+                      ),
+                      onTap: () => Future.delayed(
+                        Duration.zero,
+                        () => _showEditSaleDialog(sale),
+                      ),
                     ),
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        child: const Row(
-                          children: [
-                            Icon(Icons.edit, size: 18, color: Colors.blue),
-                            SizedBox(width: 8),
-                            Text('دەستکاری'),
-                          ],
-                        ),
-                        onTap: () => Future.delayed(
-                          Duration.zero,
-                          () => _showEditSaleDialog(sale),
-                        ),
+                    const PopupMenuItem(
+                      value: 'receipt',
+                      child: Row(
+                        children: [
+                          Icon(Icons.receipt_long, size: 18, color: Colors.orange),
+                          SizedBox(width: 8),
+                          Text('وەسڵی فرۆشتن'),
+                        ],
                       ),
-                      PopupMenuItem(
-                        child: const Row(
-                          children: [
-                            Icon(Icons.delete, size: 18, color: Colors.red),
-                            SizedBox(width: 8),
-                            Text('سڕینەوە'),
-                          ],
-                        ),
-                        onTap: () => Future.delayed(
-                          Duration.zero,
-                          () => _showDeleteSaleDialog(sale),
-                        ),
+                    ),
+                    PopupMenuItem(
+                      child: const Row(
+                        children: [
+                          Icon(Icons.delete, size: 18, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('سڕینەوە'),
+                        ],
                       ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
+                      onTap: () => Future.delayed(
+                        Duration.zero,
+                        () => _showDeleteSaleDialog(sale),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildStatCard(
     String title,
