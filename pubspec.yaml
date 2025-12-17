@@ -2,7 +2,7 @@ name: koga
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.0.1+6
+version: 1.0.1+9
 
 environment:
   sdk: ^3.9.0
@@ -20,6 +20,9 @@ dependencies:
   file_picker: ^10.3.3
   share_plus: ^7.2.1
   url_launcher: ^6.3.2
+  screenshot: ^3.0.0
+  barcode_widget: ^2.0.4
+  
 
 dev_dependencies:
   flutter_test:
